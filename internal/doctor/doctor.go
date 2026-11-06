@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luis/memo-ai/internal/config"
-	"github.com/luis/memo-ai/internal/detect"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/config"
+	"github.com/luisccalderon/MeMo-AI/internal/detect"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
 // Status is the outcome of one check.

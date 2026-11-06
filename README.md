@@ -35,8 +35,8 @@ compaction. MeMo-AI makes memory and evidence part of the workflow instead of an
 ### From source
 
 ```sh
-git clone https://github.com/luis/memo-ai.git
-cd memo-ai
+git clone https://github.com/luisccalderon/MeMo-AI.git
+cd MeMo-AI
 make build
 ./bin/memo-ai install
 ```
@@ -50,7 +50,7 @@ make build
 ### With Go
 
 ```sh
-go install github.com/luis/memo-ai/cmd/memo-ai@latest
+go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest
 memo-ai install
 ```
 

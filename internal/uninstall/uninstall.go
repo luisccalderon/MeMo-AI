@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luis/memo-ai/internal/backup"
-	"github.com/luis/memo-ai/internal/config"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/backup"
+	"github.com/luisccalderon/MeMo-AI/internal/config"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
 // Options controls removal.

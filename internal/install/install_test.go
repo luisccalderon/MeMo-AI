@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/luis/memo-ai/internal/config"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/config"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
 func testPaths(t *testing.T) opencode.Paths {

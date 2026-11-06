@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/luis/memo-ai/internal/banner"
-	"github.com/luis/memo-ai/internal/i18n"
+	"github.com/luisccalderon/MeMo-AI/internal/banner"
+	"github.com/luisccalderon/MeMo-AI/internal/i18n"
 )
 
 // Option is one choice in a Select or MultiSelect prompt.

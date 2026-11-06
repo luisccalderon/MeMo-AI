@@ -25,7 +25,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 
 echo "Building memo-ai ($VERSION)..."
 (cd "$ROOT" && "$GO" build -trimpath \
-	-ldflags "-s -w -X github.com/luis/memo-ai/internal/version.Version=$VERSION" \
+	-ldflags "-s -w -X github.com/luisccalderon/MeMo-AI/internal/version.Version=$VERSION" \
 	-o "$TMP/memo-ai" ./cmd/memo-ai)
 
 install -d "$PREFIX/bin"

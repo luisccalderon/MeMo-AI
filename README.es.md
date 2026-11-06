@@ -38,8 +38,8 @@ la memoria y la evidencia sean parte del flujo de trabajo, no un añadido:
 ### Desde el código
 
 ```sh
-git clone https://github.com/luis/memo-ai.git
-cd memo-ai
+git clone https://github.com/luisccalderon/MeMo-AI.git
+cd MeMo-AI
 make build
 ./bin/memo-ai install
 ```
@@ -53,7 +53,7 @@ make build
 ### Con Go
 
 ```sh
-go install github.com/luis/memo-ai/cmd/memo-ai@latest
+go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest
 memo-ai install
 ```
 

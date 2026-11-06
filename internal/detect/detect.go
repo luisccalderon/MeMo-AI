@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luis/memo-ai/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
 )
 
 // LocalModel is a model served by a local OpenAI-compatible runtime.

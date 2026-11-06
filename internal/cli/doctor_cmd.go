@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/luis/memo-ai/internal/banner"
-	"github.com/luis/memo-ai/internal/detect"
-	"github.com/luis/memo-ai/internal/doctor"
-	"github.com/luis/memo-ai/internal/i18n"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/term"
+	"github.com/luisccalderon/MeMo-AI/internal/banner"
+	"github.com/luisccalderon/MeMo-AI/internal/detect"
+	"github.com/luisccalderon/MeMo-AI/internal/doctor"
+	"github.com/luisccalderon/MeMo-AI/internal/i18n"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
 func doctorReport(paths opencode.Paths, env detect.Environment, lang string) doctor.Report {

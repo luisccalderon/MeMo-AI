@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/luis/memo-ai/internal/banner"
-	"github.com/luis/memo-ai/internal/detect"
-	"github.com/luis/memo-ai/internal/i18n"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
-	"github.com/luis/memo-ai/internal/version"
+	"github.com/luisccalderon/MeMo-AI/internal/banner"
+	"github.com/luisccalderon/MeMo-AI/internal/detect"
+	"github.com/luisccalderon/MeMo-AI/internal/i18n"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/version"
 )
 
 type globals struct {

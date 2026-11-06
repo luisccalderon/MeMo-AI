@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/luis/memo-ai/internal/assets"
-	"github.com/luis/memo-ai/internal/backup"
-	"github.com/luis/memo-ai/internal/config"
-	"github.com/luis/memo-ai/internal/engram"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/assets"
+	"github.com/luisccalderon/MeMo-AI/internal/backup"
+	"github.com/luisccalderon/MeMo-AI/internal/config"
+	"github.com/luisccalderon/MeMo-AI/internal/engram"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
 // MemoSubagents lists the subagents shipped by MeMo-AI.

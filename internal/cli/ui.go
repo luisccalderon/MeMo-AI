@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/luis/memo-ai/internal/term"
+	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
 func newUI(lang string) *term.UI {

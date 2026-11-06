@@ -2,7 +2,7 @@ BINARY  := memo-ai
 PREFIX  ?= $(HOME)/.local
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.1.0-dev)
 GO      ?= go
-LDFLAGS := -s -w -X github.com/luis/memo-ai/internal/version.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/luisccalderon/MeMo-AI/internal/version.Version=$(VERSION)
 PKG     := ./cmd/memo-ai
 
 .PHONY: all build test vet fmt fmt-check check install uninstall clean

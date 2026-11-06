@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/luis/memo-ai/internal/cli"
+	"github.com/luisccalderon/MeMo-AI/internal/cli"
 )
 
 func main() {

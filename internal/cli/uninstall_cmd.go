@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"github.com/luis/memo-ai/internal/i18n"
-	"github.com/luis/memo-ai/internal/opencode"
-	"github.com/luis/memo-ai/internal/state"
-	"github.com/luis/memo-ai/internal/term"
-	"github.com/luis/memo-ai/internal/uninstall"
+	"github.com/luisccalderon/MeMo-AI/internal/i18n"
+	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/state"
+	"github.com/luisccalderon/MeMo-AI/internal/term"
+	"github.com/luisccalderon/MeMo-AI/internal/uninstall"
 )
 
 func runUninstall(paths opencode.Paths, st *state.State, lang string, opts globals) int {
