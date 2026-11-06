@@ -1,0 +1,30 @@
+# Build output
+/bin/
+/dist/
+/memo-ai
+/memo-ai.exe
+
+# Go
+*.test
+*.out
+coverage.txt
+coverage.html
+vendor/
+
+# Node (plugin package)
+node_modules/
+*.tsbuildinfo
+.npm/
+packages/*/dist/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local environment
+.env
+.env.local
+*.local

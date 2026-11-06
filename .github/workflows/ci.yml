@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Check formatting
+        run: |
+          out=$(gofmt -l $(find . -name '*.go' -not -path './vendor/*'))
+          if [ -n "$out" ]; then
+            echo "gofmt needed on:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: go build -trimpath -o bin/memo-ai ./cmd/memo-ai
+
+      - name: Smoke test
+        run: |
+          ./bin/memo-ai version
+          ./bin/memo-ai --help
+          ./bin/memo-ai install --yes --dry-run --lang en
