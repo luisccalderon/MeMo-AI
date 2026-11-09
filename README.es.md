@@ -22,7 +22,8 @@ mismos archivos y pierden el hilo después de una compactación. MeMo-AI hace qu
 la memoria y la evidencia sean parte del flujo de trabajo, no un añadido:
 
 - **Recuerda antes de preguntar** — recupera contexto de Engram (`mem_context`, `mem_search`).
-- **Orquesta a propósito** — trabaja en línea por defecto; delega solo por una razón concreta.
+- **Orquesta a propósito** — ODD: autoriza, explora, clasifica, trabaja en línea por defecto y
+  delega solo por un trigger concreto.
 - **Demuestra antes de declarar terminado** — cada cierre incluye un comando y su resultado.
 - **Persiste lo importante** — decisiones, arreglos y handoffs duraderos se guardan en Engram.
 
@@ -121,6 +122,32 @@ Los subagentes son opcionales y están limitados a profundidad 1. Cuando se
 desactivan, el agente primario recibe `deny subagent *` y hace todo el trabajo
 en línea.
 
+## Cómo funciona el orquestador
+
+`memo-orchestrator` ejecuta un ciclo fijo en cada petición:
+
+1. **Autoriza** — solo lectura salvo que la petición autorice un cambio.
+2. **Recuerda** — recupera contexto del proyecto desde Engram antes de preguntar.
+3. **Explora** — lee el código existente primero.
+4. **Clasifica** — las tareas pequeñas quedan en línea; las grandes reciben un documento de
+   feature.
+5. **Implementa** — una unidad verificable a la vez, test-first cuando aplica.
+6. **Verifica** — reporta `comando → resultado`.
+7. **Persiste** — guarda conocimiento duradero y cierra sesiones sustanciales.
+
+La delegación es opt-in por trigger: presupuesto de evidencia, mapeo, writers en paralelo,
+context backstop, trabajo por acción, verificación de alto riesgo y curaduría de memoria. Todo
+handoff declara objetivo, superficies de edición permitidas, restricciones, invariantes,
+criterio de aceptación y formato de retorno. Todo cambio de código cierra con una línea `Risk:`.
+
+### Política de commits
+
+- **Supervisado (default):** sin commit, push, publish, merge ni release salvo que lo pidas.
+- **Autónomo:** cuando declaras explícitamente una ejecución automática, headless o sin
+  supervisión, el orquestador puede crear commits de unidades de trabajo en una rama de feature
+  con mensajes Conventional Commits. Push, pull requests, merge, release y operaciones git
+  destructivas siguen requiriendo una petición explícita.
+
 ## Comandos y skills
 
 | Comando | Qué hace |
@@ -195,6 +222,8 @@ herramientas y ventanas de contexto.
 - Los archivos que modificaste se omiten salvo que uses `--force`.
 - La configuración se restaura desde la copia previa al instalar al desinstalar.
 - `--dry-run` muestra cada escritura planeada sin tocar el disco.
+- El orquestador solo commitea en una ejecución autónoma declarada; push, pull requests, merge
+  y release siempre requieren una petición explícita.
 - Ningún dato sale de tu máquina salvo la descarga opcional de la release de Engram.
 
 ```sh

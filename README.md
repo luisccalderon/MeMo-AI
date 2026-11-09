@@ -19,7 +19,8 @@ Coding agents forget. They re-ask decisions, re-read the same files and lose the
 compaction. MeMo-AI makes memory and evidence part of the workflow instead of an afterthought:
 
 - **Remember before asking** — recover context from Engram (`mem_context`, `mem_search`).
-- **Orchestrate deliberately** — work inline by default; delegate only for a named reason.
+- **Orchestrate deliberately** — ODD: authorize, explore, classify, work inline by default and
+  delegate only for a named trigger.
 - **Prove before claiming done** — every completion includes a command and its result.
 - **Persist what matters** — durable decisions, fixes and handoffs are saved to Engram.
 
@@ -116,6 +117,31 @@ comments are lost when the file is rewritten, and a backup is always kept.
 Subagents are optional and capped at depth 1. When disabled, the primary agent receives
 `deny subagent *` and does all work inline.
 
+## How the orchestrator works
+
+`memo-orchestrator` runs a fixed loop on every request:
+
+1. **Authorize** — read-only unless the request authorizes a change.
+2. **Remember** — recover project context from Engram before asking.
+3. **Explore** — read the existing code first.
+4. **Classify** — small tasks stay inline; large tasks get a feature document.
+5. **Implement** — one verifiable unit at a time, test-first where applicable.
+6. **Verify** — report `command → result`.
+7. **Persist** — save durable knowledge and close substantial sessions.
+
+Delegation is opt-in by trigger: evidence budget, mapping, parallel writers, context backstop,
+per-action work, high-risk verification and memory curation. Every handoff declares its
+objective, allowed edit surfaces, constraints, invariants, acceptance check and return format.
+Every code change closes with a `Risk:` line.
+
+### Commit policy
+
+- **Supervised (default):** no commit, push, publish, merge or release unless you ask.
+- **Autonomous:** when you explicitly declare an automatic, headless or unsupervised run, the
+  orchestrator may create work-unit commits on a feature branch with Conventional Commit
+  messages. Push, pull requests, merge, release and destructive git operations still require an
+  explicit request.
+
 ## Commands and skills
 
 | Command | What it does |
@@ -185,6 +211,8 @@ See [docs/local-models.md](docs/local-models.md) for capability and context-wind
 - Files modified by you are skipped unless `--force` is used.
 - Configuration is restored from the pre-install snapshot on uninstall.
 - `--dry-run` shows every planned write without touching disk.
+- The orchestrator commits only in a declared autonomous run; push, pull requests, merge and
+  release always require an explicit request.
 - No data leaves your machine except the optional Engram release download.
 
 ```sh

@@ -155,6 +155,19 @@ atomic (`tmp` file + rename) so an interrupted run cannot leave partial JSON.
 
 Files outside the recorded manifest are never deleted.
 
+## Orchestrator behavior
+
+The orchestrator is a prompt asset, not runtime code. `agents/memo-orchestrator.md` encodes the
+ODD loop (authorize, remember, explore, classify, track, implement, verify, persist), the Task
+Size rules, the named delegation triggers, the handoff contract, the delegated verification gate
+and the commit policy. The subagent prompts under `agents/memo-*.md` and
+`skills/memo-delegation/SKILL.md` must stay consistent with it.
+
+The commit policy is behavioral. Supervised runs never commit, push, publish, merge or release
+without an explicit request. A declared autonomous run may create work-unit commits on a feature
+branch, but never push, open a pull request, merge, release or rewrite history. MeMo-AI does not
+install a runtime switch for this: the user declares the mode in the session.
+
 ## Extending the stack
 
 To change what ships:

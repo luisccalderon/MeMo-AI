@@ -10,7 +10,8 @@ Explain the MeMo-AI agent stack and the current routing.
 3. Present:
    - the primary agent and when to use it;
    - each enabled subagent, its role and its permission boundary;
-   - the delegation reasons that would trigger each subagent;
+   - the delegation triggers that would route work to each subagent;
+   - the commit mode (supervised or autonomous) and how it is declared;
    - what is disabled and how to enable it (`memo-ai configure`).
 4. End with one example request that would stay inline and one that would delegate.
 

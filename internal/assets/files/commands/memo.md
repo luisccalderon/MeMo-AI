@@ -10,6 +10,7 @@ Report the current MeMo-AI state. Do not change any files.
 3. Summarize in this order:
    - primary agent and model;
    - enabled subagents (or "subagents disabled");
+   - commit mode: supervised by default, autonomous only when declared;
    - Engram status: configured or not, and how many relevant memories were recovered;
    - the last durable memory worth knowing about, if any.
 4. Finish with one line: `Next: /memo-recall <topic>` or `Next: /memo-handoff` when the
