@@ -36,8 +36,7 @@ All state lives under the OpenCode global config directory:
 
 | Platform | Directory |
 | --- | --- |
-| Linux / macOS | `${XDG_CONFIG_HOME:-$HOME/.config}/opencode` |
-| Windows | `%APPDATA%\opencode` |
+| Linux / macOS / Windows | `${XDG_CONFIG_HOME:-~/.config}/opencode` |
 
 If `opencode.jsonc` exists it is edited; otherwise `opencode.json` is created.
 Config file resolution happens in `internal/opencode/paths.go`.

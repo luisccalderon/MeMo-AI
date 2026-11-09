@@ -4,7 +4,6 @@ package opencode
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
 // Paths describes the files and directories owned or touched by MeMo-AI.
@@ -28,16 +27,9 @@ func Discover() (Paths, error) {
 		return Paths{}, err
 	}
 
-	configDir := ""
+	configDir := filepath.Join(home, ".config", "opencode")
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		configDir = filepath.Join(xdg, "opencode")
-	} else if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			configDir = filepath.Join(appData, "opencode")
-		}
-	}
-	if configDir == "" {
-		configDir = filepath.Join(home, ".config", "opencode")
 	}
 
 	p := Paths{
