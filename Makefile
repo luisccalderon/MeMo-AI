@@ -11,7 +11,12 @@ all: check build
 
 build: bin/$(BINARY)
 
-bin/$(BINARY): go.mod $(shell find cmd internal -name '*.go' 2>/dev/null)
+# Embedded assets (prompts, skills, the Pi extension) are compiled into the
+# binary, so a change to any of them must trigger a rebuild too.
+SOURCES := $(shell find cmd internal -name '*.go' 2>/dev/null)
+ASSETS  := $(shell find internal/assets/files -type f 2>/dev/null)
+
+bin/$(BINARY): go.mod $(SOURCES) $(ASSETS)
 	@mkdir -p bin
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(BINARY) $(PKG)
 
