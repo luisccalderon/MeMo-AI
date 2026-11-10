@@ -2,10 +2,10 @@
 
 **Tu agente de código: reúne tus cambios, tus tareas y tu flujo de ingeniería.**
 
-MeMo-AI convierte [oh-my-pi](https://github.com/can1357/oh-my-pi) (`omp`) en un agente de
-ingeniería con memoria. Instala un prompt orquestador, subagentes opcionales, un servidor de
-memoria persistente ([Engram](https://github.com/Gentleman-Programming/engram)), comandos de
-barra, skills y una extensión pequeña.
+MeMo-AI convierte [Pi](https://pi.dev) (`pi`) en un agente de ingeniería con memoria. Instala un
+prompt orquestador, un servidor de memoria persistente
+([Engram](https://github.com/Gentleman-Programming/engram)), comandos de barra, skills y una
+extensión pequeña.
 
 Es un único binario Go sin dependencias en tiempo de ejecución. Solo edita lo que le pertenece,
 guarda una copia de los archivos compartidos antes de cambiarlos y puede eliminar todo lo que
@@ -25,7 +25,7 @@ make build
 ./bin/memo-ai doctor       # verificación
 ```
 
-Después abre `omp` y ejecuta `/memo`.
+Después abre `pi` y ejecuta `/memo`.
 
 ## Por qué
 
@@ -36,18 +36,19 @@ pierden el hilo después de una compactación. MeMo-AI mantiene tres cosas en un
 | --- | --- |
 | **Cambios** | Sabe qué hay en el árbol de trabajo; cada cambio de código cierra con evidencia y una línea `Risk:`. `/memo-changes` lo resume. |
 | **Tareas** | El trabajo pequeño vive en la conversación; el grande tiene un documento de feature. `/memo-tasks` informa en qué punto está. |
-| **Flujo** | Un ciclo fijo (autorizar, recordar, explorar, clasificar, implementar, verificar, persistir), con delegación solo por un trigger concreto. |
+| **Flujo** | Un ciclo fijo (autorizar, recordar, explorar, clasificar, implementar, verificar, persistir), ejecutado en línea en una sola sesión. |
 
 La memoria lo sostiene: decisiones, arreglos y handoffs se guardan en Engram y se recuperan
 antes de que el agente vuelva a preguntarte.
 
 ## Requisitos
 
-- **oh-my-pi** (`omp`) en `PATH`, o `OMP_BIN` apuntando al binario.
+- **Pi** (`pi`) en `PATH`, en su directorio de instalación gestionada (`~/.pi/agent/bin`), o
+  `PI_BIN` apuntando al binario. Instálalo desde [pi.dev](https://pi.dev).
 - **Go 1.23+** solo si compilas desde el código.
 - **Engram** es opcional. MeMo-AI puede detectarlo o descargar la última versión verificada.
-- Un runtime de modelos locales (Ollama, LM Studio, vLLM) es opcional. Cualquier
-  `provider/model` que omp acepte funciona.
+- Un runtime de modelos locales (Ollama, LM Studio, vLLM, llama.cpp) es opcional. Cualquier
+  `provider/model` que Pi acepte funciona.
 
 ## Instalación
 
@@ -60,117 +61,103 @@ antes de que el agente vuelva a preguntarte.
 Ejemplos no interactivos:
 
 ```sh
-# Modelo local de Ollama y el stack completo de subagentes
+# Modelo local de Ollama, stack completo
 memo-ai install --yes --model ollama/qwen3:8b
 
-# Todo en línea: sin subagentes ni extensión
-memo-ai install --yes --no-subagents --no-extension
+# Sin extensión
+memo-ai install --yes --no-extension
 
-# Solo memoria, skills y comandos; sin tocar el prompt de sistema de omp
-memo-ai install --yes --no-orchestrator --no-subagents
+# Solo memoria, skills y comandos; sin tocar el prompt de sistema de Pi
+memo-ai install --yes --no-orchestrator
 
 # Ver cada escritura planificada sin tocar el disco
 memo-ai install --yes --dry-run
 ```
 
-El asistente usa español por defecto; `--lang en` lo cambia a inglés.
-
 ## Qué se instala
 
-Todo vive en el directorio de agente de omp: `~/.omp/agent` por defecto. Se respetan
-`PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR` y `OMP_PROFILE` igual que lo hace omp.
+Todo vive en el directorio de agente de Pi: `~/.pi/agent` por defecto. Se respeta
+`PI_CODING_AGENT_DIR` igual que lo hace Pi.
 
 | Ruta | Propósito | Propiedad |
 | --- | --- | --- |
-| `APPEND_SYSTEM.md` | El orquestador MeMo, añadido al prompt de sistema de omp | Solo el bloque entre los marcadores `memo-ai:begin` / `memo-ai:end` |
-| `agents/memo-*.md` | Subagentes explorer, writer, reviewer y curator | Archivo completo |
-| `skills/memo-*/SKILL.md` | Procedimientos de memoria, delegación, handoff y modelos locales | Archivo completo |
-| `commands/memo*.md` | Los comandos `/memo*` | Archivo completo |
+| `APPEND_SYSTEM.md` | El orquestador MeMo, añadido al prompt de sistema de Pi | Solo el bloque entre los marcadores `memo-ai:begin` / `memo-ai:end` |
+| `skills/memo-*/SKILL.md` | Procedimientos de memoria, ejecución en línea, handoff y modelos locales | Archivo completo |
+| `prompts/memo*.md` | Los comandos `/memo*` (plantillas de prompt de Pi) | Archivo completo |
 | `extensions/memo-ai/index.ts` | Insignia de estado, herramienta `memo_status`, `/memo-about`, aviso de compactación | Archivo completo |
 | `mcp.json` | Engram como servidor MCP stdio | Solo `mcpServers.engram` |
+| `settings.json` | Modelo por defecto, solo si pasas `--model` o eliges uno en el asistente | Solo `defaultProvider` y `defaultModel` |
 | `memo-ai/state.json` | Manifiesto de archivos instalados y sus hashes SHA-256 | Archivo completo |
 | `memo-ai/backups/` | Copias tomadas antes de cambiar un archivo compartido | Directorio completo |
 
-Tu propio texto en `APPEND_SYSTEM.md` y tus otros servidores MCP se conservan.
+Se conservan tu texto propio en `APPEND_SYSTEM.md`, tus otros servidores MCP y el resto de
+ajustes de Pi. Un `settings.json` que no se pueda leer se deja intacto y se avisa.
 
-El modelo es lo único que MeMo-AI no escribe a mano. `--model` ejecuta
-`omp config set modelRoles.default <provider/model>`, de modo que omp valida el valor contra su
-propio esquema. Si no encuentra `omp`, MeMo-AI te muestra ese comando.
+## Subagentes
 
-## Agentes
+Pi no trae subagentes, así que MeMo-AI no instala ninguno. El orquestador trabaja en línea en una
+sola sesión: acota su evidencia, lanza lecturas en paralelo y, en cambios de riesgo alto, termina
+con una autorrevisión de solo lectura del diff final. El soporte de subagentes está previsto para
+una versión posterior; las definiciones de agentes se conservan en el repositorio para ese
+trabajo.
 
-omp tiene una sesión principal y agentes de tarea que puede lanzar. MeMo-AI sigue esa forma:
-
-| Pieza | Tipo | Rol |
-| --- | --- | --- |
-| Orquestador MeMo | bloque del prompt de sistema | Memoria primero: recuperar, enrutar, verificar, persistir. |
-| `memo-explorer` | agente de tarea | Mapa de código de solo lectura con evidencia `path:line`. |
-| `memo-writer` | agente de tarea | Una unidad de implementación acotada con superficie de edición propia. |
-| `memo-reviewer` | agente de tarea | Revisión independiente de solo lectura, ordenada por severidad. |
-| `memo-curator` | agente de tarea | Consolida hallazgos duraderos en Engram. |
-
-Los subagentes son opcionales. Un subagente se activa instalando su archivo y se desactiva
-quitándolo; los agentes MeMo declaran `spawns: ""`, así que no pueden lanzar otros agentes. Con
-`--no-subagents` el orquestador hace todo en línea. `--subagent-model` fija un modelo en el
-frontmatter de los agentes.
+`--no-subagents` y `--subagent-model` se siguen aceptando para no romper scripts existentes, pero
+no tienen efecto.
 
 ## Cómo funciona el orquestador
 
 El orquestador ejecuta un ciclo fijo en cada petición:
 
 1. **Autorizar** — solo lectura salvo que la petición autorice un cambio.
-2. **Recordar** — recuperar el contexto del proyecto desde Engram antes de preguntar.
-3. **Explorar** — leer primero el código existente.
-4. **Clasificar** — las tareas pequeñas se hacen en línea; las grandes tienen un documento de feature.
-5. **Implementar** — una unidad verificable a la vez, con test primero cuando aplica.
-6. **Verificar** — informar `comando → resultado`.
-7. **Persistir** — guardar el conocimiento duradero y cerrar las sesiones sustanciales.
-
-La delegación es opcional y por trigger: presupuesto de evidencia, mapeo, writers en paralelo,
-límite de contexto, trabajo por acción, verificación de alto riesgo y curación de memoria. Cada
-handoff declara objetivo, superficies de edición permitidas, restricciones, invariantes,
-criterio de aceptación y formato de retorno.
+2. **Recordar** — recupera contexto del proyecto en Engram antes de preguntar.
+3. **Explorar** — lee primero el código existente.
+4. **Clasificar** — las tareas pequeñas van en línea; las grandes tienen un documento de feature.
+5. **Implementar** — una unidad verificable a la vez, primero el test cuando aplica.
+6. **Verificar** — informa `comando → resultado`.
+7. **Persistir** — guarda el conocimiento duradero y cierra las sesiones sustanciales.
 
 ### Política de commits
 
 - **Supervisado (por defecto):** sin commit, push, publicación, merge ni release salvo que lo pidas.
 - **Autónomo:** cuando declaras explícitamente una ejecución automática, headless o sin
-  supervisión, el orquestador puede crear commits por unidad de trabajo en una rama de feature
-  con mensajes Conventional Commit. Push, pull requests, merge, release y operaciones
-  destructivas de git siguen requiriendo una petición explícita.
+  supervisión, el orquestador puede crear commits por unidad de trabajo en una rama de feature con
+  mensajes Conventional Commit. Push, pull requests, merge, release y operaciones git destructivas
+  siguen requiriendo una petición explícita.
 
 ## Comandos y skills
 
 | Comando | Qué hace |
 | --- | --- |
-| `/memo` | Muestra la configuración activa de memoria y orquestación. |
+| `/memo` | Muestra la memoria activa y la configuración de orquestación. |
 | `/memo-changes [ref]` | Resume los cambios del árbol de trabajo con su evidencia y riesgo. |
 | `/memo-tasks [feature]` | Muestra las tareas registradas, su estado y el siguiente paso. |
 | `/memo-recall <tema>` | Busca en la memoria del proyecto y responde con evidencia. |
 | `/memo-remember <hecho>` | Guarda una decisión, arreglo o descubrimiento duradero. |
 | `/memo-handoff` | Escribe un resumen reanudable antes de pausar o compactar. |
-| `/memo-review [foco]` | Ejecuta una revisión independiente de solo lectura. |
-| `/memo-agents` | Explica los agentes instalados y el enrutamiento. |
+| `/memo-review [foco]` | Ejecuta una revisión de solo lectura de los cambios actuales. |
 | `/memo-about` | Muestra la configuración sin gastar un turno del modelo (extensión). |
 
-Las skills aparecen en el prompt de sistema de omp y se cargan cuando su descripción coincide
-con la tarea: `memo-memory`, `memo-delegation`, `memo-handoff`, `memo-local-models`.
+Las skills aparecen en el prompt de sistema de Pi y se cargan cuando su descripción coincide con
+la tarea: `memo-memory`, `memo-delegation` (ejecución en línea), `memo-handoff`,
+`memo-local-models`.
 
 ## Extensión
 
-omp descubre `extensions/memo-ai/index.ts` automáticamente. Aporta:
+Pi descubre `extensions/memo-ai/index.ts` automáticamente. Aporta:
 
 - Una entrada de estado `MEMO` (`MEMO · memory` cuando Engram está configurado).
-- Una herramienta de solo lectura `memo_status`, para que el agente lea su configuración en vez
-  de suponerla.
+- Una herramienta `memo_status` de solo lectura, para que el agente lea su configuración en vez de
+  adivinarla.
 - El comando `/memo-about`.
 - Un aviso para ejecutar `/memo-handoff` cuando el contexto está por compactarse.
 
-Se desactiva con `--no-extension`. Reconfigura cuando quieras con `memo-ai configure`.
+Las extensiones se ejecutan con todos tus permisos. Revisa `index.ts` si quieres saber
+exactamente qué hace. Desactívala con `--no-extension`. Reconfigura con `memo-ai configure` cuando
+quieras. Ejecuta `/reload` en Pi después de cambiar archivos instalados.
 
 ## Memoria con Engram
 
-MeMo-AI añade Engram a `~/.omp/agent/mcp.json`:
+MeMo-AI añade Engram a `~/.pi/agent/mcp.json`:
 
 ```json
 {
@@ -178,7 +165,8 @@ MeMo-AI añade Engram a `~/.omp/agent/mcp.json`:
     "engram": {
       "type": "stdio",
       "command": "/usr/bin/engram",
-      "args": ["mcp", "--tools=agent"]
+      "args": ["mcp", "--tools=agent"],
+      "exposure": "direct"
     }
   }
 }
@@ -196,27 +184,27 @@ problemas.
 
 ## Modelos locales
 
-MeMo-AI detecta Ollama (`:11434`), LM Studio (`:1234`) y vLLM (`:8000`) y ofrece sus modelos en
-el asistente. omp descubre Ollama y LM Studio por su cuenta; vLLM necesita un proveedor en
-`models.yml`.
+MeMo-AI detecta Ollama (`:11434`), LM Studio (`:1234`) y vLLM (`:8000`) y ofrece sus modelos en el
+asistente. Pi solo lista un modelo cuyo proveedor esté declarado, así que Ollama, LM Studio y vLLM
+necesitan una entrada en `~/.pi/agent/models.json`. llama.cpp viene integrado (`/llama`).
 
 ```sh
 memo-ai install --yes --model ollama/qwen3:8b
 memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 ```
 
-Consulta [docs/local-models.md](docs/local-models.md) para la guía de capacidades y ventana de
-contexto.
+Consulta [docs/local-models.md](docs/local-models.md) para la entrada de `models.json` y la guía
+de capacidad.
 
 ## Seguridad
 
 - Solo se eliminan los archivos registrados en `memo-ai/state.json`.
 - Los archivos que modificaste se omiten salvo que uses `--force`.
-- `APPEND_SYSTEM.md` y `mcp.json` se editan en el sitio: solo se tocan el bloque MeMo y la
-  entrada de Engram, y antes se toma una copia.
+- `APPEND_SYSTEM.md`, `mcp.json` y `settings.json` se editan en su sitio: solo se tocan el bloque
+  MeMo, la entrada de Engram y las dos claves del modelo por defecto, y antes se toma una copia.
 - `--dry-run` muestra cada escritura planificada sin tocar el disco.
-- El orquestador solo hace commits en una ejecución autónoma declarada; push, pull requests,
-  merge y release siempre requieren una petición explícita.
+- El orquestador solo hace commits en una ejecución autónoma declarada; push, pull requests, merge
+  y release siempre requieren una petición explícita.
 - Ningún dato sale de tu máquina salvo la descarga opcional de Engram.
 
 ```sh
@@ -224,7 +212,7 @@ memo-ai uninstall            # quita los archivos instalados, el bloque del prom
 memo-ai uninstall --force    # también quita los archivos que modificaste
 ```
 
-La desinstalación deja el modelo por defecto de omp como está y te indica cómo restablecerlo.
+La desinstalación deja el modelo por defecto de Pi como está y te indica cómo restablecerlo.
 
 ## Referencia de comandos
 
@@ -233,42 +221,44 @@ memo-ai [comando] [flags]
 
 Comandos
   install       Instala o reconfigura el stack (interactivo)
-  configure     Reconfigura el orquestador, el modelo y los subagentes
-  doctor        Diagnóstico de solo lectura (admite --json)
-  agents        Lista agentes, modelos locales y la configuración actual
+  configure     Reconfigura el orquestador, el modelo y la extensión
+  doctor        Chequeo de salud de solo lectura (admite --json)
+  agents        Muestra la configuración de MeMo-AI y los modelos locales detectados
   engram        Estado o instalación de Engram
-  uninstall     Elimina solo lo que MeMo-AI instaló
-  version       Muestra la versión
+  uninstall     Quita solo lo que MeMo-AI instaló
+  version       Imprime la versión
 
 Flags globales
   --lang es|en
   --yes
   --dry-run
   --model <provider/model>
-  --subagent-model <provider/model>
   --no-orchestrator
-  --no-subagents
   --no-engram
   --no-extension
   --install-engram
   --force
   --restore
   --json
+  --no-subagents                      (se acepta, sin efecto)
+  --subagent-model <provider/model>   (se acepta, sin efecto)
 ```
 
-## Si vienes de la versión para OpenCode
+## Si vienes de la versión de oh-my-pi
 
-Las versiones anteriores apuntaban a OpenCode. Esa instalación vive en `~/.config/opencode` y
-esta versión no la toca. Elimínala con el binario anterior (`memo-ai uninstall`) antes de
-actualizar y luego ejecuta `memo-ai install` de nuevo.
+La versión anterior apuntaba a oh-my-pi (`omp`). Esa instalación vive en `~/.omp/agent` y esta
+versión no la toca. Quítala con el binario anterior (`memo-ai uninstall`) antes de actualizar y
+luego ejecuta `memo-ai install` de nuevo.
 
-| Antes (OpenCode) | Ahora (oh-my-pi) |
+| Antes (oh-my-pi) | Ahora (Pi) |
 | --- | --- |
-| Agente primario `memo-orchestrator`, `--agent` | Bloque en `APPEND_SYSTEM.md`, `--no-orchestrator` |
-| Fusión en `opencode.json` | Fusión en `mcp.json` + `omp config set` |
-| Reglas de permisos de subagentes | Archivos de agente con `spawns: ""` |
-| Plugin TUI, `--no-plugin` | Extensión, `--no-extension` |
-| `lmstudio/<modelo>` | `lm-studio/<modelo>` |
+| `~/.omp/agent` | `~/.pi/agent` |
+| `OMP_BIN`, `OMP_PROFILE`, `PI_CONFIG_DIR` | `PI_BIN`, `PI_CODING_AGENT_DIR` |
+| `commands/memo*.md` | `prompts/memo*.md` |
+| `omp config set modelRoles.default` | `defaultProvider` / `defaultModel` en `settings.json` |
+| Agentes de tarea `agents/memo-*.md` | No se instalan: Pi aún no tiene subagentes |
+| `/memo-agents` | Eliminado |
+| `@oh-my-pi/pi-coding-agent`, `pi.zod` | `@earendil-works/pi-coding-agent`, `typebox` |
 
 ## Desarrollo
 
@@ -284,20 +274,20 @@ Estructura del proyecto:
 
 ```text
 cmd/memo-ai/            punto de entrada
-internal/cli/           flags, asistente y comandos
-internal/install/       escritura de assets, bloque del prompt, fusión de mcp.json, rol de modelo
+internal/cli/           parseo de flags, asistente, comandos
+internal/install/       escritura de assets, bloque del prompt, fusión de mcp.json, modelo por defecto
 internal/uninstall/     eliminación segura y limpieza
 internal/promptblock/   bloque gestionado dentro de APPEND_SYSTEM.md
-internal/omp/           resolución del directorio de agente de omp
-internal/config/        carga/guardado JSON/JSONC y utilidades anidadas
-internal/detect/        detección de omp, Engram y modelos locales
-internal/doctor/        diagnósticos
-internal/engram/        descarga, checksum e instalación
-internal/assets/files/  prompt, agentes, skills, comandos y extensión embebidos
+internal/pi/            resolución del directorio de agente de Pi
+internal/config/        carga/guardado JSON/JSONC y helpers anidados
+internal/detect/        detección de Pi, Engram y modelos locales
+internal/doctor/        chequeos de salud
+internal/engram/        descarga, checksum e instalación de la release
+internal/assets/files/  prompt, skills, plantillas de prompt, extensión y agentes (no se instalan) embebidos
 ```
 
-Consulta [docs/architecture.md](docs/architecture.md) para el ciclo de instalación y el modelo
-de datos.
+Consulta [docs/architecture.md](docs/architecture.md) para el ciclo de instalación y el modelo de
+datos.
 
 ## Licencia
 

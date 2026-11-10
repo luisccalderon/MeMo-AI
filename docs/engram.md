@@ -2,7 +2,7 @@
 
 Engram is the persistent memory layer for MeMo-AI. It stores durable project
 knowledge — decisions, fixes, constraints, handoffs — and exposes it to
-oh-my-pi (`omp`) as an MCP server. The goal is simple: the agent should recover what
+Pi (`pi`) as an MCP server. The goal is simple: the agent should recover what
 the project already knows before asking you again.
 
 - Upstream: <https://github.com/Gentleman-Programming/engram>
@@ -11,7 +11,7 @@ the project already knows before asking you again.
 
 ## Configuration
 
-`memo-ai install` merges this into `~/.omp/agent/mcp.json` when Engram is
+`memo-ai install` merges this into `~/.pi/agent/mcp.json` when Engram is
 enabled. Other servers in that file are left untouched:
 
 ```json
@@ -20,7 +20,8 @@ enabled. Other servers in that file are left untouched:
     "engram": {
       "type": "stdio",
       "command": "/usr/bin/engram",
-      "args": ["mcp", "--tools=agent"]
+      "args": ["mcp", "--tools=agent"],
+      "exposure": "direct"
     }
   }
 }
@@ -29,6 +30,10 @@ enabled. Other servers in that file are left untouched:
 `--tools=agent` exposes the agent-oriented tool set instead of the full
 surface. The command path is the one detected at install time. If Engram is
 moved later, re-run `memo-ai configure` or edit the path.
+
+`"exposure": "direct"` makes Pi declare the memory tools to the model like
+built-in tools. Pi's default, `codemode`, hides a server's tools behind scripts,
+which is a poor fit for a small tool set the agent needs on every turn.
 
 Disable memory with `--no-engram`. MeMo-AI then removes `mcpServers.engram`
 only if a previous run added it and it still points at the same binary; a
@@ -94,12 +99,12 @@ list on your version.
 
 ## Troubleshooting
 
-**omp does not list Engram.** omp reads MCP servers at startup. Restart it
-after install, then run `/mcp` inside a session. `memo-ai doctor` shows the
+**Pi does not list Engram.** Run `/reload` (or restart Pi) after install, then run
+`/mcp` inside a session, or `pi mcp list` from a shell. `memo-ai doctor` shows the
 command recorded in `mcp.json`.
 
-**Tools have a prefix.** Depending on the omp version, Engram tools may appear
-as `mem_*` or with a server prefix. The prompts refer to the short names; the
+**Tools have a prefix.** Pi names MCP tools `mcp__<server>__<tool>`, so Engram's
+tools appear as `mcp__engram__mem_*`. The prompts refer to the short names; the
 agent uses whichever the runtime exposes.
 
 **`engram` not found.** Run `memo-ai doctor`; it reports the detected path and
@@ -107,7 +112,7 @@ version. Install with `memo-ai engram install` or point `engram_path` at your
 binary by re-running `memo-ai configure`.
 
 **Tools fail with a schema error.** MeMo-AI pins `--tools=agent`; if you
-changed it, restore it and restart omp.
+changed it, restore it and run `/reload` in Pi.
 
 **Nothing is remembered across sessions.** Memory is scoped to the project
 directory. Confirm you are in the same project, then run `/memo-recall
