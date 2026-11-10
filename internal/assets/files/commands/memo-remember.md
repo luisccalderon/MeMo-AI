@@ -1,5 +1,6 @@
 ---
 description: Save a durable decision, fix or discovery to Engram
+argument-hint: "<topic>"
 ---
 
 Save the following knowledge to Engram:

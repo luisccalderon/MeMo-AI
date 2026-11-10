@@ -6,12 +6,12 @@ import (
 	"github.com/luisccalderon/MeMo-AI/internal/engram"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
 	"github.com/luisccalderon/MeMo-AI/internal/install"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
-func runEngram(paths opencode.Paths, env detect.Environment, st *state.State, lang string, opts globals, args []string) int {
+func runEngram(paths omp.Paths, env detect.Environment, st *state.State, lang string, opts globals, args []string) int {
 	ui := term.New(lang)
 	action := "status"
 	if len(args) > 0 {
@@ -43,14 +43,15 @@ func runEngram(paths opencode.Paths, env detect.Environment, st *state.State, la
 			}
 		}
 		result, err := install.Run(paths, install.Options{
-			Lang:          lang,
-			PrimaryAgent:  st.PrimaryAgent,
-			PrimaryModel:  st.PrimaryModel,
-			SubagentModel: st.SubagentModel,
-			Subagents:     st.Subagents,
-			EnableEngram:  true,
-			EngramPath:    path,
-			InstallPlugin: st.Plugin,
+			Lang:             lang,
+			Orchestrator:     st.Orchestrator,
+			PrimaryModel:     st.PrimaryModel,
+			SubagentModel:    st.SubagentModel,
+			Subagents:        st.Subagents,
+			EnableEngram:     true,
+			EngramPath:       path,
+			InstallExtension: st.Extension,
+			SetModel:         install.OmpModelSetter(env.OmpPath),
 		})
 		if err != nil {
 			ui.Error(err.Error())
@@ -73,13 +74,13 @@ func runEngram(paths opencode.Paths, env detect.Environment, st *state.State, la
 		if env.EngramVersion != "" {
 			ui.Info("%s: %s", i18n.T(lang, "engram.version"), env.EngramVersion)
 		}
-		doc, err := config.Load(paths.ConfigFile)
+		doc, err := config.Load(paths.MCPFile)
 		if err != nil {
 			ui.Warn("%s", i18n.Tf(lang, "error.config_parse", err.Error()))
 			return 1
 		}
-		if command, ok := config.Get(doc.Data, "mcp", "servers", "engram", "command"); ok {
-			ui.Info("MCP: %v", command)
+		if command := config.GetString(doc.Data, "mcpServers", "engram", "command"); command != "" {
+			ui.Info("MCP: %s (%s)", command, paths.MCPFile)
 		} else {
 			ui.Muted("%s", i18n.T(lang, "engram.configure"))
 		}

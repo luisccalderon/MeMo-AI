@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-// Vesper palette shared with the OpenCode TUI plugin.
+// Vesper palette.
 const (
 	White = "\x1b[38;2;255;255;255m"
 	Cream = "\x1b[38;2;255;224;200m"
@@ -30,17 +30,17 @@ var letters = []string{
 var shades = []string{White, Cream, Peach, Peach, Mint, Mint}
 
 // Print writes the MeMo-AI wordmark, tagline and version line.
-func Print(w io.Writer, memoVersion, openCodeVersion string) {
+func Print(w io.Writer, memoVersion, ompVersion string) {
 	oc := "not detected"
-	if openCodeVersion != "" {
-		oc = "OpenCode " + openCodeVersion
+	if ompVersion != "" {
+		oc = "oh-my-pi " + ompVersion
 	}
 	fmt.Fprintln(w)
 	for i, line := range letters {
 		fmt.Fprintf(w, "  %s%s%s\n", shades[i], line, Reset)
 	}
 	fmt.Fprintf(w, "  %s%s%s\n", Rule, "────────────────────────────────────────────────────────────", Reset)
-	fmt.Fprintf(w, "  %sMEMORY%s %s·%s %sORCHESTRATION%s %s·%s %sEVIDENCE%s\n",
+	fmt.Fprintf(w, "  %sCHANGES%s %s·%s %sTASKS%s %s·%s %sWORKFLOW%s\n",
 		Bold+Peach, Reset, Rule, Reset, Bold+Mint, Reset, Rule, Reset, Bold+Cream, Reset)
 	fmt.Fprintf(w, "  %sv%s · %s%s\n\n", Muted, memoVersion, oc, Reset)
 }

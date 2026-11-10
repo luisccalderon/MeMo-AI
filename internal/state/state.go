@@ -12,7 +12,7 @@ import (
 )
 
 // Version is the state schema version.
-const Version = 1
+const Version = 2
 
 // FileRecord is one file written by MeMo-AI.
 type FileRecord struct {
@@ -21,7 +21,7 @@ type FileRecord struct {
 	Kind   string `json:"kind"`
 }
 
-// ConfigRecord tracks the OpenCode config file and its pre-install backup.
+// ConfigRecord tracks a shared file MeMo-AI edits in place and its pre-install backup.
 type ConfigRecord struct {
 	Path    string `json:"path"`
 	Backup  string `json:"backup,omitempty"`
@@ -30,19 +30,23 @@ type ConfigRecord struct {
 
 // State is persisted at <config>/memo-ai/state.json.
 type State struct {
-	Version       int          `json:"version"`
-	Language      string       `json:"language"`
-	InstalledAt   string       `json:"installed_at"`
-	UpdatedAt     string       `json:"updated_at"`
-	PrimaryAgent  string       `json:"primary_agent"`
-	PrimaryModel  string       `json:"primary_model,omitempty"`
-	Subagents     []string     `json:"subagents"`
-	SubagentModel string       `json:"subagent_model,omitempty"`
-	EngramPath    string       `json:"engram_path,omitempty"`
-	EngramMCP     bool         `json:"engram_mcp"`
-	Plugin        bool         `json:"plugin"`
-	Config        ConfigRecord `json:"config"`
-	Files         []FileRecord `json:"files"`
+	Version      int    `json:"version"`
+	Language     string `json:"language"`
+	InstalledAt  string `json:"installed_at"`
+	UpdatedAt    string `json:"updated_at"`
+	Orchestrator bool   `json:"orchestrator"`
+	PrimaryModel string `json:"primary_model,omitempty"`
+	// ModelApplied reports whether PrimaryModel reached the omp settings.
+	ModelApplied  bool     `json:"model_applied"`
+	Subagents     []string `json:"subagents"`
+	SubagentModel string   `json:"subagent_model,omitempty"`
+	EngramPath    string   `json:"engram_path,omitempty"`
+	EngramMCP     bool     `json:"engram_mcp"`
+	Extension     bool     `json:"extension"`
+	// Config is omp's mcp.json; Prompt is APPEND_SYSTEM.md.
+	Config ConfigRecord `json:"config"`
+	Prompt ConfigRecord `json:"prompt"`
+	Files  []FileRecord `json:"files"`
 }
 
 // Load reads state, returning an empty state when the file is missing.

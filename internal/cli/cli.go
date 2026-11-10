@@ -9,27 +9,27 @@ import (
 	"github.com/luisccalderon/MeMo-AI/internal/banner"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/version"
 )
 
 type globals struct {
-	lang          string
-	agent         string
-	model         string
-	subagentModel string
-	yes           bool
-	dryRun        bool
-	noSubagents   bool
-	noEngram      bool
-	noPlugin      bool
-	installEngram bool
-	force         bool
-	json          bool
-	restore       bool
-	help          bool
-	version       bool
+	lang           string
+	model          string
+	subagentModel  string
+	yes            bool
+	dryRun         bool
+	noSubagents    bool
+	noEngram       bool
+	noOrchestrator bool
+	noExtension    bool
+	installEngram  bool
+	force          bool
+	json           bool
+	restore        bool
+	help           bool
+	version        bool
 }
 
 type invocation struct {
@@ -56,9 +56,9 @@ func Run(args []string) int {
 		return 0
 	}
 
-	paths, err := opencode.Discover()
+	paths, err := omp.Discover()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "memo-ai: cannot resolve OpenCode paths: %v\n", err)
+		fmt.Fprintf(os.Stderr, "memo-ai: cannot resolve omp paths: %v\n", err)
 		return 1
 	}
 	st, _ := state.Load(paths.StateFile)
@@ -104,22 +104,22 @@ func parse(args []string) (invocation, error) {
 	var inv invocation
 	valueFlags := map[string]*string{
 		"lang":           &inv.opts.lang,
-		"agent":          &inv.opts.agent,
 		"model":          &inv.opts.model,
 		"subagent-model": &inv.opts.subagentModel,
 	}
 	boolFlags := map[string]*bool{
-		"yes":            &inv.opts.yes,
-		"dry-run":        &inv.opts.dryRun,
-		"no-subagents":   &inv.opts.noSubagents,
-		"no-engram":      &inv.opts.noEngram,
-		"no-plugin":      &inv.opts.noPlugin,
-		"install-engram": &inv.opts.installEngram,
-		"force":          &inv.opts.force,
-		"json":           &inv.opts.json,
-		"restore":        &inv.opts.restore,
-		"help":           &inv.opts.help,
-		"version":        &inv.opts.version,
+		"yes":             &inv.opts.yes,
+		"dry-run":         &inv.opts.dryRun,
+		"no-subagents":    &inv.opts.noSubagents,
+		"no-engram":       &inv.opts.noEngram,
+		"no-orchestrator": &inv.opts.noOrchestrator,
+		"no-extension":    &inv.opts.noExtension,
+		"install-engram":  &inv.opts.installEngram,
+		"force":           &inv.opts.force,
+		"json":            &inv.opts.json,
+		"restore":         &inv.opts.restore,
+		"help":            &inv.opts.help,
+		"version":         &inv.opts.version,
 	}
 
 	for i := 0; i < len(args); i++ {
@@ -191,11 +191,11 @@ func printHelp(lang string) {
 		{"--lang es|en", i18n.T(lang, "help.flag.lang")},
 		{"--yes", i18n.T(lang, "help.flag.yes")},
 		{"--dry-run", i18n.T(lang, "help.flag.dry-run")},
-		{"--agent <id>", i18n.T(lang, "help.flag.agent")},
 		{"--model <provider/model>", i18n.T(lang, "help.flag.model")},
+		{"--no-orchestrator", i18n.T(lang, "help.flag.no-orchestrator")},
 		{"--no-subagents", i18n.T(lang, "help.flag.no-subagents")},
 		{"--no-engram", i18n.T(lang, "help.flag.no-engram")},
-		{"--no-plugin", i18n.T(lang, "help.flag.no-plugin")},
+		{"--no-extension", i18n.T(lang, "help.flag.no-extension")},
 	} {
 		fmt.Printf("  %-28s %s\n", row[0], row[1])
 	}

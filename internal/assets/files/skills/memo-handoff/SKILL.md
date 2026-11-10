@@ -1,8 +1,6 @@
 ---
-name: MeMo Handoff
+name: memo-handoff
 description: Preserve a resumable record before compaction, a long pause or a session handoff.
-metadata:
-  opencode/autoinvoke: true
 ---
 
 # MeMo Handoff

@@ -1,4 +1,4 @@
-// Command memo-ai configures a memory-first orchestration stack for OpenCode.
+// Command memo-ai installs the MeMo-AI coding-agent stack on top of oh-my-pi.
 package main
 
 import (

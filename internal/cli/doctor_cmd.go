@@ -8,15 +8,15 @@ import (
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/doctor"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
-func doctorReport(paths opencode.Paths, env detect.Environment, lang string) doctor.Report {
+func doctorReport(paths omp.Paths, env detect.Environment, lang string) doctor.Report {
 	return doctor.Run(paths, env, lang)
 }
 
-func runDoctor(paths opencode.Paths, env detect.Environment, lang string, opts globals) int {
+func runDoctor(paths omp.Paths, env detect.Environment, lang string, opts globals) int {
 	report := doctorReport(paths, env, lang)
 	if opts.json {
 		out, err := json.MarshalIndent(report, "", "  ")

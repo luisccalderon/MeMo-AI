@@ -22,7 +22,7 @@ func TestNormalize(t *testing.T) {
 }
 
 func TestTranslateFallback(t *testing.T) {
-	if got := T("en", "app.tagline"); got != "Memory, orchestration and evidence for OpenCode." {
+	if got := T("en", "app.tagline"); got != "Your coding agent, bringing your changes, tasks, and engineering workflow together." {
 		t.Fatalf("tagline = %q", got)
 	}
 	if got := T("en", "missing.key"); got != "missing.key" {

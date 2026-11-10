@@ -129,9 +129,10 @@ func Commands() []string {
 	}
 }
 
-// MCPCommand is the argv OpenCode uses to start Engram over stdio.
-func MCPCommand(path string) []any {
-	return []any{path, "mcp", "--tools=agent"}
+// MCPArgs are the arguments omp passes to the Engram binary to start its
+// stdio MCP server.
+func MCPArgs() []any {
+	return []any{"mcp", "--tools=agent"}
 }
 
 func fetchRelease(ctx context.Context, client *http.Client) (Release, error) {

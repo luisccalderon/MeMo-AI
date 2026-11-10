@@ -1,4 +1,4 @@
-// Package config reads, merges and writes OpenCode JSON/JSONC configuration.
+// Package config reads, merges and writes JSON/JSONC configuration files.
 package config
 
 import (
@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-// Document is a mutable OpenCode configuration document.
+// Document is a mutable configuration document.
 type Document struct {
 	Path string
 	Data map[string]any
 }
 
-// Load reads an OpenCode config file. A missing file returns an empty document.
+// Load reads a config file. A missing file returns an empty document.
 func Load(path string) (*Document, error) {
 	doc := &Document{Path: path, Data: map[string]any{}}
 	raw, err := os.ReadFile(path)
@@ -49,7 +49,7 @@ func (d *Document) Save() error {
 	if err := os.MkdirAll(filepath.Dir(d.Path), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(d.Path), ".opencode-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(d.Path), ".memo-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (d *Document) Save() error {
 }
 
 // StripJSONC removes // and /* */ comments plus trailing commas, preserving
-// string contents. It is intentionally small: OpenCode only needs JSONC input.
+// string contents. It is intentionally small: only JSONC input is needed.
 func StripJSONC(raw []byte) []byte {
 	out := make([]byte, 0, len(raw))
 	inString := false

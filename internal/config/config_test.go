@@ -32,7 +32,7 @@ func TestStripJSONC(t *testing.T) {
 
 func TestLoadJSONCAndSave(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "opencode.jsonc")
+	path := filepath.Join(dir, "mcp.jsonc")
 	if err := os.WriteFile(path, []byte(`{
   // keep me out
   "model": "ollama/qwen3:8b",

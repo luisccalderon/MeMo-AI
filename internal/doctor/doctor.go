@@ -3,13 +3,15 @@ package doctor
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/promptblock"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
@@ -67,11 +69,14 @@ func (r Report) Counts() (int, int, int, int) {
 }
 
 // Run executes every check.
-func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
+func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 	st, stateErr := state.Load(paths.StateFile)
 	report := Report{State: st}
 
 	add := func(name string, status Status, detail, hint string) {
+		if status == OK {
+			hint = "" // a hint is a next step; a passing check has none
+		}
 		report.Checks = append(report.Checks, Check{Name: name, Status: status, Detail: detail, Hint: hint})
 	}
 
@@ -85,45 +90,56 @@ func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
 		add("State", OK, fmt.Sprintf("installed %s", st.InstalledAt), "")
 	}
 
-	// OpenCode.
-	if env.OpenCodePath != "" {
-		add("OpenCode", OK, fmt.Sprintf("%s (%s)", env.OpenCodeVersion, env.OpenCodePath), "")
+	// oh-my-pi.
+	if env.OmpPath != "" {
+		add("oh-my-pi", OK, fmt.Sprintf("%s (%s)", env.OmpVersion, env.OmpPath), "")
 	} else {
-		add("OpenCode", Fail, "binary not found on PATH", "Install OpenCode: https://opencode.ai")
+		add("oh-my-pi", Fail, "omp binary not found on PATH", "Install it: https://github.com/can1357/oh-my-pi (or set OMP_BIN).")
 	}
+	add("Agent directory", OK, paths.ConfigDir, "")
 
-	// Configuration.
-	doc, err := config.Load(paths.ConfigFile)
+	// MCP configuration.
+	doc, err := config.Load(paths.MCPFile)
 	switch {
 	case err != nil:
-		add("Config", Fail, err.Error(), "Fix the JSON/JSONC or restore a backup.")
-	case !opencode.Exists(paths.ConfigFile):
-		add("Config", Warn, "no configuration file yet", "Run `memo-ai install`.")
+		add("MCP config", Fail, err.Error(), "Fix the JSON in mcp.json or restore a backup.")
+	case !omp.Exists(paths.MCPFile):
+		add("MCP config", Skip, "no mcp.json yet", "")
 	default:
-		add("Config", OK, paths.ConfigFile, "")
+		add("MCP config", OK, paths.MCPFile, "")
 	}
 
-	if doc != nil {
-		primary := config.GetString(doc.Data, "default_agent")
-		if primary == "" {
-			add("Primary agent", Warn, "default_agent is not set", "Run `memo-ai configure`.")
-		} else {
-			add("Primary agent", OK, primary, "")
-		}
-		model := config.GetString(doc.Data, "model")
-		if model == "" {
-			add("Model", Warn, "no root model configured", "Choose one in /models or run `memo-ai configure`.")
-		} else {
-			add("Model", OK, model, "")
-		}
+	// Orchestrator prompt.
+	prompt, _ := os.ReadFile(paths.PromptFile)
+	switch {
+	case st.Orchestrator && promptblock.Has(string(prompt)):
+		add("Orchestrator prompt", OK, paths.PromptFile, "")
+	case st.Orchestrator:
+		add("Orchestrator prompt", Fail, "managed block missing from "+paths.PromptFile, "Run `memo-ai install`.")
+	case promptblock.Has(string(prompt)):
+		add("Orchestrator prompt", Warn, "block present but disabled in state", "Run `memo-ai configure`.")
+	default:
+		add("Orchestrator prompt", Skip, "disabled in state", "Run `memo-ai configure` to enable it.")
+	}
+
+	if st.PrimaryModel != "" && st.ModelApplied {
+		add("Model", OK, st.PrimaryModel+" (modelRoles.default)", "")
+	} else if st.PrimaryModel != "" {
+		add("Model", Warn, st.PrimaryModel+" was not applied to omp", "Run `omp config set modelRoles.default "+st.PrimaryModel+"`.")
+	} else {
+		add("Model", Skip, "managed by omp", "Choose one with /model or `memo-ai configure --model <provider/model>`.")
 	}
 
 	// Files.
-	agentFiles := []string{
-		"memo-orchestrator.md", "memo-explorer.md", "memo-writer.md",
-		"memo-reviewer.md", "memo-curator.md",
+	if len(st.Subagents) > 0 {
+		var agentFiles []string
+		for _, name := range st.Subagents {
+			agentFiles = append(agentFiles, name+".md")
+		}
+		add("Subagents", filesStatus(paths.AgentsDir, agentFiles), strings.Join(st.Subagents, ", "), "Run `memo-ai install`.")
+	} else {
+		add("Subagents", Skip, "disabled: the orchestrator works inline", "Run `memo-ai configure` to enable them.")
 	}
-	add("Agents", filesStatus(paths.AgentsDir, agentFiles), joinExisting(paths.AgentsDir, agentFiles), "Run `memo-ai install`.")
 
 	skills := []string{"memo-memory", "memo-delegation", "memo-handoff", "memo-local-models"}
 	var skillPaths []string
@@ -132,14 +148,16 @@ func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
 	}
 	add("Skills", filesStatus(paths.SkillsDir, skillPaths), joinExisting(paths.SkillsDir, skillPaths), "Run `memo-ai install`.")
 
-	commands := []string{"memo.md", "memo-recall.md", "memo-remember.md", "memo-handoff.md", "memo-review.md", "memo-agents.md"}
+	commands := []string{
+		"memo.md", "memo-changes.md", "memo-tasks.md", "memo-recall.md", "memo-remember.md",
+		"memo-handoff.md", "memo-review.md", "memo-agents.md",
+	}
 	add("Commands", filesStatus(paths.CommandsDir, commands), joinExisting(paths.CommandsDir, commands), "Run `memo-ai install`.")
 
-	pluginFiles := []string{"index.ts", "tui.tsx", "package.json"}
-	if st.Plugin {
-		add("TUI plugin", filesStatus(paths.PluginDir, pluginFiles), paths.PluginDir, "Run `memo-ai install --plugin`.")
+	if st.Extension {
+		add("Extension", filesStatus(paths.ExtensionDir, []string{"index.ts"}), paths.ExtensionDir, "Run `memo-ai install`.")
 	} else {
-		add("TUI plugin", Skip, "disabled in state", "Run `memo-ai configure` to enable it.")
+		add("Extension", Skip, "disabled in state", "Run `memo-ai configure` to enable it.")
 	}
 
 	// Engram.
@@ -153,11 +171,11 @@ func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
 
 	if doc != nil {
 		if st.EngramMCP {
-			command, ok := config.Get(doc.Data, "mcp", "servers", "engram", "command")
-			if !ok {
-				add("Engram MCP", Fail, "missing mcp.servers.engram", "Run `memo-ai configure`.")
+			command := config.GetString(doc.Data, "mcpServers", "engram", "command")
+			if command == "" {
+				add("Engram MCP", Fail, "missing mcpServers.engram in mcp.json", "Run `memo-ai configure`.")
 			} else {
-				add("Engram MCP", OK, fmt.Sprint(command), "")
+				add("Engram MCP", OK, command, "")
 			}
 		} else {
 			add("Engram MCP", Skip, "not configured", "")
@@ -205,40 +223,10 @@ func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
 
 	// Backup.
 	if st.Config.Backup != "" {
-		if opencode.Exists(st.Config.Backup) {
+		if omp.Exists(st.Config.Backup) {
 			add("Config backup", OK, st.Config.Backup, "")
 		} else {
 			add("Config backup", Warn, "backup missing: "+st.Config.Backup, "")
-		}
-	}
-
-	// Subagent permissions.
-	if doc != nil {
-		primary := st.PrimaryAgent
-		if primary == "" {
-			primary = "memo-orchestrator"
-		}
-		perms, _ := config.Get(doc.Data, "agents", primary, "permissions")
-		allowed := allowedSubagents(perms)
-		switch {
-		case len(st.Subagents) == 0:
-			if allowed["*"] == "deny" {
-				add("Subagent policy", OK, "disabled (deny *)", "")
-			} else {
-				add("Subagent policy", Warn, "state says disabled but permission deny is missing", "Run `memo-ai configure`.")
-			}
-		default:
-			var missing []string
-			for _, name := range st.Subagents {
-				if allowed[name] != "allow" {
-					missing = append(missing, name)
-				}
-			}
-			if len(missing) == 0 {
-				add("Subagent policy", OK, strings.Join(st.Subagents, ", "), "")
-			} else {
-				add("Subagent policy", Warn, "missing allow rule: "+strings.Join(missing, ", "), "Run `memo-ai configure`.")
-			}
 		}
 	}
 
@@ -249,7 +237,7 @@ func Run(paths opencode.Paths, env detect.Environment, lang string) Report {
 func filesStatus(root string, files []string) Status {
 	missing := 0
 	for _, file := range files {
-		if !opencode.Exists(filepath.Join(root, file)) {
+		if !omp.Exists(filepath.Join(root, file)) {
 			missing++
 		}
 	}
@@ -266,7 +254,7 @@ func filesStatus(root string, files []string) Status {
 func joinExisting(root string, files []string) string {
 	var present []string
 	for _, file := range files {
-		if opencode.Exists(filepath.Join(root, file)) {
+		if omp.Exists(filepath.Join(root, file)) {
 			present = append(present, file)
 		}
 	}
@@ -274,25 +262,4 @@ func joinExisting(root string, files []string) string {
 		return "none found"
 	}
 	return fmt.Sprintf("%d/%d present", len(present), len(files))
-}
-
-func allowedSubagents(value any) map[string]string {
-	out := map[string]string{}
-	rules, ok := value.([]any)
-	if !ok {
-		return out
-	}
-	for _, rule := range rules {
-		m, ok := rule.(map[string]any)
-		if !ok {
-			continue
-		}
-		action, _ := m["action"].(string)
-		resource, _ := m["resource"].(string)
-		effect, _ := m["effect"].(string)
-		if action == "subagent" {
-			out[resource] = effect
-		}
-	}
-	return out
 }

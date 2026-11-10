@@ -1,8 +1,6 @@
 ---
-name: MeMo Memory Protocol
+name: memo-memory
 description: Recover, search, save and hand off durable project knowledge with Engram so the agent stops re-asking the user.
-metadata:
-  opencode/autoinvoke: true
 ---
 
 # MeMo Memory Protocol

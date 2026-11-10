@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 )
 
 // LocalModel is a model served by a local OpenAI-compatible runtime.
@@ -27,12 +27,12 @@ type LocalModel struct {
 	Endpoint string
 }
 
-// Ref returns the provider/model reference used by OpenCode.
+// Ref returns the provider/model reference used by omp.
 func (m LocalModel) Ref() string {
 	return m.Provider + "/" + m.ID
 }
 
-// Agent is a discovered OpenCode agent.
+// Agent is a discovered omp task agent.
 type Agent struct {
 	ID          string
 	Name        string
@@ -45,52 +45,53 @@ type Agent struct {
 
 // Environment is the result of detection.
 type Environment struct {
-	OpenCodePath    string
-	OpenCodeVersion string
-	EngramPath      string
-	EngramVersion   string
-	Models          []LocalModel
-	Agents          []Agent
+	OmpPath       string
+	OmpVersion    string
+	EngramPath    string
+	EngramVersion string
+	Models        []LocalModel
+	Agents        []Agent
 }
 
 // Detect inspects the machine with a short, bounded timeout.
 func Detect(ctx context.Context) Environment {
 	env := Environment{}
-	if path := FindOpenCode(); path != "" {
-		env.OpenCodePath = path
-		env.OpenCodeVersion = commandVersion(ctx, path, "--version")
-		env.OpenCodeVersion = strings.TrimPrefix(env.OpenCodeVersion, "opencode ")
+	if path := FindOmp(); path != "" {
+		env.OmpPath = path
+		env.OmpVersion = commandVersion(ctx, path, "--version")
+		env.OmpVersion = strings.TrimPrefix(env.OmpVersion, "omp ")
 	}
 	env.EngramPath, env.EngramVersion = FindEngram(ctx)
 	env.Models = LocalModels(ctx)
 	return env
 }
 
-// FindOpenCode locates the OpenCode binary. It checks PATH first, then the
-// common install locations that are not always present in a non-interactive
-// shell's PATH.
-func FindOpenCode() string {
-	if override := os.Getenv("OPENCODE_BIN"); override != "" {
+// FindOmp locates the oh-my-pi binary. It checks OMP_BIN and PATH first, then
+// the common install locations that are not always present in a
+// non-interactive shell's PATH.
+func FindOmp() string {
+	if override := os.Getenv("OMP_BIN"); override != "" {
 		if info, err := os.Stat(override); err == nil && !info.IsDir() {
 			return override
 		}
 	}
-	if path, err := exec.LookPath("opencode"); err == nil {
+	if path, err := exec.LookPath("omp"); err == nil {
 		return path
 	}
-	name := "opencode"
+	name := "omp"
 	if runtime.GOOS == "windows" {
-		name = "opencode.exe"
+		name = "omp.exe"
 	}
 	var candidates []string
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates,
-			filepath.Join(home, ".opencode", "bin", name),
+			filepath.Join(home, ".bun", "bin", name),
+			filepath.Join(home, ".omp", "bin", name),
 			filepath.Join(home, ".local", "bin", name),
 			filepath.Join(home, "bin", name),
 		)
 	}
-	candidates = append(candidates, "/usr/local/bin/opencode", "/opt/homebrew/bin/opencode")
+	candidates = append(candidates, "/usr/local/bin/omp", "/opt/homebrew/bin/omp")
 	for _, path := range candidates {
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			return path
@@ -149,7 +150,7 @@ type endpoint struct {
 func LocalModels(ctx context.Context) []LocalModel {
 	endpoints := []endpoint{
 		{provider: "ollama", url: envOr("OLLAMA_HOST", "http://127.0.0.1:11434") + "/api/tags", kind: "ollama"},
-		{provider: "lmstudio", url: envOr("LMSTUDIO_HOST", "http://127.0.0.1:1234") + "/api/v1/models", kind: "openai"},
+		{provider: "lm-studio", url: envOr("LMSTUDIO_HOST", "http://127.0.0.1:1234") + "/api/v1/models", kind: "openai"},
 		{provider: "vllm", url: envOr("VLLM_HOST", "http://127.0.0.1:8000") + "/v1/models", kind: "openai"},
 	}
 
@@ -284,30 +285,40 @@ func nonEmpty(values ...string) []string {
 	return out
 }
 
-// Agents returns built-in and user-defined OpenCode agents.
-func Agents(paths opencode.Paths) []Agent {
+// Agents returns omp's bundled task agents plus the user-defined ones.
+func Agents(paths omp.Paths) []Agent {
 	agents := []Agent{
-		{ID: "build", Name: "Build", Description: "Default coding agent", Mode: "primary", Builtin: true},
-		{ID: "plan", Name: "Plan", Description: "Explores and plans without editing", Mode: "primary", Builtin: true},
-		{ID: "general", Name: "General", Description: "General read/write subagent", Mode: "subagent", Builtin: true},
-		{ID: "explore", Name: "Explore", Description: "Read-only code explorer", Mode: "subagent", Builtin: true},
+		{ID: "task", Name: "task", Description: "General-purpose worker", Mode: "bundled", Builtin: true},
+		{ID: "scout", Name: "scout", Description: "Fast read-only codebase research", Mode: "bundled", Builtin: true},
+		{ID: "reviewer", Name: "reviewer", Description: "Code review specialist", Mode: "bundled", Builtin: true},
+		{ID: "security-reviewer", Name: "security-reviewer", Description: "Security-focused review", Mode: "bundled", Builtin: true},
+		{ID: "sonic", Name: "sonic", Description: "Fast worker for small tasks", Mode: "bundled", Builtin: true},
 	}
-	seen := map[string]bool{"build": true, "plan": true, "general": true, "explore": true}
-	_ = filepath.WalkDir(paths.AgentsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+	seen := map[string]bool{}
+	for _, agent := range agents {
+		seen[agent.ID] = true
+	}
+	entries, _ := os.ReadDir(paths.AgentsDir)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
+			continue
 		}
-		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
-			return nil
+		agent := parseAgentFile(paths.AgentsDir, filepath.Join(paths.AgentsDir, entry.Name()))
+		if agent.ID == "" {
+			continue
 		}
-		agent := parseAgentFile(paths.AgentsDir, path)
-		if agent.ID == "" || seen[agent.ID] {
-			return nil
+		if seen[agent.ID] {
+			// A user agent overrides the bundled one with the same name.
+			for i := range agents {
+				if agents[i].ID == agent.ID {
+					agents[i] = agent
+				}
+			}
+			continue
 		}
 		seen[agent.ID] = true
 		agents = append(agents, agent)
-		return nil
-	})
+	}
 	sort.SliceStable(agents, func(i, j int) bool {
 		if agents[i].Builtin != agents[j].Builtin {
 			return !agents[i].Builtin
@@ -323,7 +334,7 @@ func parseAgentFile(root, path string) Agent {
 		return Agent{}
 	}
 	id := strings.TrimSuffix(filepath.ToSlash(rel), ".md")
-	agent := Agent{ID: id, Name: id, Mode: "primary", Path: path}
+	agent := Agent{ID: id, Name: id, Mode: "user", Path: path}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -356,12 +367,14 @@ func parseAgentFile(root, path string) Agent {
 		switch key {
 		case "description":
 			agent.Description = value
-		case "mode":
-			agent.Mode = value
 		case "model":
 			agent.Model = value
 		case "name":
-			agent.Name = value
+			// omp identifies an agent by its frontmatter name, not its file.
+			if value != "" {
+				agent.ID = value
+				agent.Name = value
+			}
 		}
 	}
 	return agent

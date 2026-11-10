@@ -5,16 +5,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/luisccalderon/MeMo-AI/internal/backup"
 	"github.com/luisccalderon/MeMo-AI/internal/config"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/promptblock"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
 // Options controls removal.
 type Options struct {
-	Force         bool
+	Force bool
+	// RestoreConfig restores the pre-install mcp.json snapshot instead of
+	// removing only the Engram entry.
 	RestoreConfig bool
 }
 
@@ -26,8 +30,9 @@ type Result struct {
 	Restored string
 }
 
-// Run removes the installed files and optionally restores the config backup.
-func Run(paths opencode.Paths, opts Options) (Result, error) {
+// Run removes the installed files, the orchestrator prompt block and the
+// Engram MCP entry.
+func Run(paths omp.Paths, opts Options) (Result, error) {
 	var res Result
 	st, err := state.Load(paths.StateFile)
 	if err != nil {
@@ -62,13 +67,17 @@ func Run(paths opencode.Paths, opts Options) (Result, error) {
 	for dir := range dirs {
 		removeEmptyParents(dir, paths.ConfigDir)
 	}
-	removeEmptyParents(paths.PluginDir, paths.ConfigDir)
+	removeEmptyParents(paths.ExtensionDir, paths.ConfigDir)
 
-	// Restore the configuration captured before the first install. When there is
-	// no backup (an older install), remove only the keys MeMo-AI manages.
+	if err := cleanPrompt(paths, &res); err != nil {
+		res.Warnings = append(res.Warnings, "Could not clean "+paths.PromptFile+": "+err.Error())
+	}
+
+	// Restore the mcp.json captured before the first install. Without a
+	// backup, or without --restore, remove only the entry MeMo-AI manages.
 	if opts.RestoreConfig && st.Config.Backup != "" {
 		stamp := "uninstall-" + backup.Stamp()
-		if opencode.Exists(st.Config.Path) {
+		if omp.Exists(st.Config.Path) {
 			if saved, err := backup.Snapshot(paths.BackupDir, stamp, st.Config.Path, filepath.Base(st.Config.Path)); err == nil && saved != "" {
 				res.Warnings = append(res.Warnings, "Current config snapshotted at "+saved)
 			}
@@ -78,10 +87,13 @@ func Run(paths opencode.Paths, opts Options) (Result, error) {
 		} else {
 			res.Restored = st.Config.Path
 		}
-	} else {
-		if err := cleanConfig(paths, st, &res); err != nil {
-			res.Warnings = append(res.Warnings, "Could not clean config: "+err.Error())
-		}
+	} else if err := cleanMCP(paths, st, &res); err != nil {
+		res.Warnings = append(res.Warnings, "Could not clean config: "+err.Error())
+	}
+
+	if st.ModelApplied {
+		res.Warnings = append(res.Warnings,
+			"The omp default model was left as is. Change it with /model or `omp config reset modelRoles.default`.")
 	}
 
 	_ = os.Remove(paths.StateFile)
@@ -89,125 +101,64 @@ func Run(paths opencode.Paths, opts Options) (Result, error) {
 	return res, nil
 }
 
-func cleanConfig(paths opencode.Paths, st *state.State, res *Result) error {
-	doc, err := config.Load(paths.ConfigFile)
+// cleanPrompt strips the managed block from APPEND_SYSTEM.md. Text the user
+// wrote around it is preserved; the file is deleted only when nothing is left.
+func cleanPrompt(paths omp.Paths, res *Result) error {
+	raw, err := os.ReadFile(paths.PromptFile)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
-	changed := false
-
-	if command, ok := config.Get(doc.Data, "mcp", "servers", "engram", "command"); ok {
-		if list, ok := command.([]any); ok && len(list) > 0 {
-			if first, _ := list[0].(string); first != "" {
-				config.Delete(doc.Data, "mcp", "servers", "engram")
-				changed = true
-			}
-		}
-	}
-	if stripManagedPermissions(doc.Data, st.PrimaryAgent) {
-		changed = true
-	}
-	if stripManagedPermissions(doc.Data, "memo-orchestrator") {
-		changed = true
-	}
-	for _, name := range append([]string{"memo-orchestrator"}, memoSubagents()...) {
-		if _, ok := config.Get(doc.Data, "agents", name); ok {
-			config.Delete(doc.Data, "agents", name)
-			changed = true
-		}
-	}
-	if config.GetString(doc.Data, "default_agent") == st.PrimaryAgent {
-		config.Delete(doc.Data, "default_agent")
-		changed = true
-	}
-	if st.PrimaryModel != "" && config.GetString(doc.Data, "model") == st.PrimaryModel {
-		config.Delete(doc.Data, "model")
-		changed = true
-	}
-	if depth, ok := config.Get(doc.Data, "experimental", "subagent_depth"); ok {
-		if n, ok := depth.(float64); ok && n == 1 {
-			config.Delete(doc.Data, "experimental", "subagent_depth")
-			changed = true
-		}
-	}
-	if !changed {
+	stripped, found := promptblock.Strip(string(raw))
+	if !found {
 		return nil
 	}
-	pruneEmpty(doc.Data)
-	if err := doc.Save(); err != nil {
+	if strings.TrimSpace(stripped) == "" {
+		if err := os.Remove(paths.PromptFile); err != nil {
+			return err
+		}
+		res.Removed = append(res.Removed, paths.PromptFile)
+		return nil
+	}
+	if err := os.WriteFile(paths.PromptFile, []byte(stripped), 0o644); err != nil {
 		return err
 	}
-	res.Removed = append(res.Removed, paths.ConfigFile+" (cleaned)")
+	res.Removed = append(res.Removed, paths.PromptFile+" (managed block)")
 	return nil
 }
 
-// stripManagedPermissions removes the subagent rules MeMo-AI adds to an agent
-// while preserving every other rule the user configured.
-func stripManagedPermissions(root map[string]any, agent string) bool {
-	if agent == "" {
-		return false
+// cleanMCP removes the Engram server only when it still points at the binary
+// MeMo-AI configured, so a server the user re-pointed is left alone.
+func cleanMCP(paths omp.Paths, st *state.State, res *Result) error {
+	if !st.EngramMCP || !omp.Exists(paths.MCPFile) {
+		return nil
 	}
-	agents, ok := root["agents"].(map[string]any)
-	if !ok {
-		return false
+	doc, err := config.Load(paths.MCPFile)
+	if err != nil {
+		return err
 	}
-	entry, ok := agents[agent].(map[string]any)
-	if !ok {
-		return false
+	current := config.GetString(doc.Data, "mcpServers", "engram", "command")
+	if current == "" || current != st.EngramPath {
+		return nil
 	}
-	rules, ok := entry["permissions"].([]any)
-	if !ok {
-		return false
+	config.Delete(doc.Data, "mcpServers", "engram")
+	if servers, ok := doc.Data["mcpServers"].(map[string]any); ok && len(servers) == 0 {
+		delete(doc.Data, "mcpServers")
 	}
-	managed := map[string]bool{"*": true}
-	for _, name := range memoSubagents() {
-		managed[name] = true
-	}
-	kept := make([]any, 0, len(rules))
-	for _, rule := range rules {
-		m, ok := rule.(map[string]any)
-		if ok {
-			action, _ := m["action"].(string)
-			resource, _ := m["resource"].(string)
-			if action == "subagent" && managed[resource] {
-				continue
-			}
+	if len(doc.Data) == 0 && !st.Config.Existed {
+		if err := os.Remove(paths.MCPFile); err != nil {
+			return err
 		}
-		kept = append(kept, rule)
+		res.Removed = append(res.Removed, paths.MCPFile)
+		return nil
 	}
-	if len(kept) == len(rules) {
-		return false
+	if err := doc.Save(); err != nil {
+		return err
 	}
-	if len(kept) == 0 {
-		delete(entry, "permissions")
-	} else {
-		entry["permissions"] = kept
-	}
-	if len(entry) == 0 {
-		delete(agents, agent)
-	}
-	return true
-}
-
-func pruneEmpty(root map[string]any) {
-	if agents, ok := root["agents"].(map[string]any); ok && len(agents) == 0 {
-		delete(root, "agents")
-	}
-	if mcp, ok := root["mcp"].(map[string]any); ok {
-		if servers, ok := mcp["servers"].(map[string]any); ok && len(servers) == 0 {
-			delete(mcp, "servers")
-		}
-		if len(mcp) == 0 {
-			delete(root, "mcp")
-		}
-	}
-	if experimental, ok := root["experimental"].(map[string]any); ok && len(experimental) == 0 {
-		delete(root, "experimental")
-	}
-}
-
-func memoSubagents() []string {
-	return []string{"memo-explorer", "memo-writer", "memo-reviewer", "memo-curator"}
+	res.Removed = append(res.Removed, paths.MCPFile+" (cleaned)")
+	return nil
 }
 
 func removeEmptyParents(dir, stop string) {

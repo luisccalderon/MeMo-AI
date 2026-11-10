@@ -1,8 +1,6 @@
 ---
-name: MeMo Delegation
+name: memo-delegation
 description: Route work inline or to explorer, writer, reviewer or curator only when a named trigger truly holds, with a handoff contract and a verification gate.
-metadata:
-  opencode/autoinvoke: true
 ---
 
 # MeMo Delegation

@@ -15,7 +15,6 @@ vendor/
 node_modules/
 *.tsbuildinfo
 .npm/
-packages/*/dist/
 
 # Editors and OS
 .DS_Store

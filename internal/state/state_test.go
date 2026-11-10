@@ -8,7 +8,7 @@ import (
 
 func TestSaveLoadAndRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "memo-ai", "state.json")
-	st := &State{Language: "en", PrimaryAgent: "memo-orchestrator"}
+	st := &State{Language: "en", Orchestrator: true}
 	st.Record("/tmp/a.md", "abc", "agent")
 	st.Record("/tmp/a.md", "def", "agent")
 	st.Record("/tmp/b.md", "ghi", "command")
@@ -22,7 +22,7 @@ func TestSaveLoadAndRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.PrimaryAgent != "memo-orchestrator" || len(loaded.Files) != 2 {
+	if !loaded.Orchestrator || len(loaded.Files) != 2 {
 		t.Fatalf("unexpected state: %#v", loaded)
 	}
 	record, ok := loaded.Find("/tmp/a.md")

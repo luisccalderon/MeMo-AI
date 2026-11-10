@@ -1,5 +1,6 @@
 ---
 description: Search project memory and answer with evidence
+argument-hint: "<topic>"
 ---
 
 Recall what the project already knows about: $ARGUMENTS

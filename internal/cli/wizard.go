@@ -3,20 +3,19 @@ package cli
 import (
 	"strings"
 
-	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/engram"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
 	"github.com/luisccalderon/MeMo-AI/internal/install"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 	"github.com/luisccalderon/MeMo-AI/internal/version"
 )
 
-func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, opts globals, lang string) int {
+func runWizard(paths omp.Paths, env detect.Environment, st *state.State, opts globals, lang string) int {
 	ui := term.New(lang)
-	ui.Banner(version.Version, env.OpenCodeVersion)
+	ui.Banner(version.Version, env.OmpVersion)
 
 	interactive := !opts.yes && isTTY()
 	if !interactive && !opts.yes && !opts.dryRun {
@@ -42,19 +41,12 @@ func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, op
 
 	printDetection(ui, env, lang)
 
-	doc, err := config.Load(paths.ConfigFile)
-	if err != nil {
-		ui.Error(i18n.Tf(lang, "error.config_parse", err.Error()))
-		return 1
-	}
-	currentAgent := config.GetString(doc.Data, "default_agent")
-	currentModel := config.GetString(doc.Data, "model")
+	// omp owns its settings file; the only model MeMo-AI knows is the one
+	// it applied on a previous run.
+	currentModel := st.PrimaryModel
 
-	// Primary agent.
-	agentID := opts.agent
-	if agentID == "" {
-		agentID = chooseAgent(ui, paths, st, currentAgent, interactive, lang)
-	}
+	// Orchestrator prompt.
+	orchestrator := resolveOrchestrator(ui, st, opts, interactive, lang)
 
 	// Primary model.
 	model := opts.model
@@ -102,15 +94,15 @@ func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, op
 		}
 	}
 
-	// TUI plugin.
-	installPlugin := !opts.noPlugin
-	if interactive && !opts.noPlugin {
-		installPlugin, _ = ui.Confirm(i18n.T(lang, "wizard.plugin"), true)
+	// omp extension.
+	installExtension := !opts.noExtension
+	if interactive && !opts.noExtension {
+		installExtension, _ = ui.Confirm(i18n.T(lang, "wizard.extension"), true)
 	}
 
 	// Summary.
 	if interactive {
-		printSummary(ui, lang, agentID, model, subagents, subagentModel, engramPath, enableEngram, installPlugin)
+		printSummary(ui, lang, orchestrator, model, subagents, subagentModel, engramPath, enableEngram, installExtension)
 		ok, err := ui.Confirm(i18n.T(lang, "wizard.confirm"), true)
 		if err != nil || !ok {
 			ui.Muted(i18n.T(lang, "wizard.cancelled"))
@@ -120,15 +112,16 @@ func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, op
 
 	ui.Title(i18n.T(lang, "wizard.installing"))
 	result, err := install.Run(paths, install.Options{
-		Lang:          lang,
-		PrimaryAgent:  agentID,
-		PrimaryModel:  model,
-		SubagentModel: subagentModel,
-		Subagents:     subagents,
-		EnableEngram:  enableEngram && engramPath != "",
-		EngramPath:    engramPath,
-		InstallPlugin: installPlugin,
-		DryRun:        opts.dryRun,
+		Lang:             lang,
+		Orchestrator:     orchestrator,
+		PrimaryModel:     model,
+		SubagentModel:    subagentModel,
+		Subagents:        subagents,
+		EnableEngram:     enableEngram && engramPath != "",
+		EngramPath:       engramPath,
+		InstallExtension: installExtension,
+		SetModel:         install.OmpModelSetter(env.OmpPath),
+		DryRun:           opts.dryRun,
 	})
 	if err != nil {
 		ui.Error(err.Error())
@@ -149,15 +142,19 @@ func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, op
 	for _, b := range result.Backups {
 		ui.Muted("%s: %s", i18n.T(lang, "install.config_backup"), b)
 	}
-	ui.Success("%s: %s", i18n.T(lang, "install.config_updated"), result.ConfigPath)
+	if orchestrator {
+		ui.Success("%s: %s", i18n.T(lang, "install.prompt_ready"), result.PromptPath)
+	} else {
+		ui.Muted("%s", i18n.T(lang, "install.prompt_skipped"))
+	}
 	ui.Success("%s: %d", i18n.T(lang, "install.files_written"), len(result.Writes))
 	if enableEngram && engramPath != "" {
 		ui.Success("%s: %s", i18n.T(lang, "install.engram_ready"), engramPath)
 	} else {
 		ui.Muted("%s", i18n.T(lang, "install.engram_skipped"))
 	}
-	if installPlugin {
-		ui.Success("%s: %s", i18n.T(lang, "install.plugin_ready"), result.PluginDir)
+	if installExtension {
+		ui.Success("%s: %s", i18n.T(lang, "install.extension_ready"), result.ExtensionDir)
 	}
 	if len(subagents) == 0 {
 		ui.Muted("%s", i18n.T(lang, "install.subagents_off"))
@@ -181,10 +178,10 @@ func runWizard(paths opencode.Paths, env detect.Environment, st *state.State, op
 
 func printDetection(ui *term.UI, env detect.Environment, lang string) {
 	ui.Title(i18n.T(lang, "wizard.detected"))
-	if env.OpenCodePath != "" {
-		ui.Info("%s: %s (%s)", i18n.T(lang, "wizard.opencode"), env.OpenCodeVersion, env.OpenCodePath)
+	if env.OmpPath != "" {
+		ui.Info("%s: %s (%s)", i18n.T(lang, "wizard.omp"), env.OmpVersion, env.OmpPath)
 	} else {
-		ui.Warn("%s: %s", i18n.T(lang, "wizard.opencode"), i18n.T(lang, "engram.missing"))
+		ui.Warn("%s", i18n.T(lang, "error.omp_missing"))
 	}
 	if env.EngramPath != "" {
 		ui.Info("%s: %s", i18n.T(lang, "wizard.engram"), displayEngram(env))
@@ -213,56 +210,21 @@ func displayEngram(env detect.Environment) string {
 	return env.EngramPath
 }
 
-func chooseAgent(ui *term.UI, paths opencode.Paths, st *state.State, current string, interactive bool, lang string) string {
+// resolveOrchestrator decides whether the MeMo operating loop is installed
+// into APPEND_SYSTEM.md. A previous choice is kept on non-interactive re-runs.
+func resolveOrchestrator(ui *term.UI, st *state.State, opts globals, interactive bool, lang string) bool {
+	if opts.noOrchestrator {
+		return false
+	}
+	previous := st.InstalledAt == "" || st.Orchestrator
 	if !interactive {
-		if st.PrimaryAgent != "" {
-			return st.PrimaryAgent
-		}
-		if current != "" {
-			return current
-		}
-		return "memo-orchestrator"
+		return previous
 	}
-
-	agents := detect.Agents(paths)
-	var ordered []detect.Agent
-	seen := map[string]bool{}
-	add := func(agent detect.Agent) {
-		if agent.ID == "" || seen[agent.ID] {
-			return
-		}
-		seen[agent.ID] = true
-		ordered = append(ordered, agent)
-	}
-	add(detect.Agent{
-		ID:          "memo-orchestrator",
-		Name:        "MeMo Orchestrator",
-		Description: "Memory-first orchestrator with Engram and optional subagents",
-		Mode:        "primary",
-	})
-	for _, agent := range agents {
-		if agent.Mode == "primary" || agent.Mode == "all" || agent.Mode == "" {
-			add(agent)
-		}
-	}
-
-	options := make([]term.Option, 0, len(ordered))
-	defaultIdx := 0
-	for i, agent := range ordered {
-		label := agent.ID
-		if agent.ID == "memo-orchestrator" {
-			label += "  (" + i18n.T(lang, "common.recommended") + ")"
-		}
-		options = append(options, term.Option{Label: label, Description: agent.Description})
-		if agent.ID == st.PrimaryAgent || agent.ID == current {
-			defaultIdx = i
-		}
-	}
-	idx, err := ui.Select(i18n.T(lang, "wizard.primary_agent"), options, defaultIdx)
+	enable, err := ui.Confirm(i18n.T(lang, "wizard.orchestrator"), previous)
 	if err != nil {
-		return "memo-orchestrator"
+		return previous
 	}
-	return ordered[idx].ID
+	return enable
 }
 
 func chooseModel(ui *term.UI, env detect.Environment, st *state.State, current string, interactive bool, lang string) string {
@@ -291,7 +253,7 @@ func chooseModel(ui *term.UI, env detect.Environment, st *state.State, current s
 	manualIdx := len(options)
 	options = append(options, term.Option{Label: i18n.T(lang, "common.manual"), Description: i18n.T(lang, "wizard.model_hint")})
 	inheritIdx := len(options)
-	options = append(options, term.Option{Label: i18n.T(lang, "common.inherit"), Description: "No root model override"})
+	options = append(options, term.Option{Label: i18n.T(lang, "common.inherit"), Description: "Leave omp model roles untouched"})
 	if len(local) == 0 && current == "" {
 		defaultIdx = manualIdx
 	}
@@ -391,10 +353,10 @@ func resolveSubagents(ui *term.UI, st *state.State, opts globals, interactive bo
 
 func chooseSubagentModel(ui *term.UI, env detect.Environment, primaryModel, lang string) string {
 	var options []term.Option
-	options = append(options, term.Option{Label: i18n.T(lang, "common.inherit"), Description: "Use the primary agent model"})
+	options = append(options, term.Option{Label: i18n.T(lang, "common.inherit"), Description: "Let omp pick the subagent model"})
 	values := []string{""}
 	if primaryModel != "" {
-		options = append(options, term.Option{Label: primaryModel, Description: "Same as the primary agent"})
+		options = append(options, term.Option{Label: primaryModel, Description: "Same as the main session"})
 		values = append(values, primaryModel)
 	}
 	for _, model := range uniqueModels(env.Models) {
@@ -417,9 +379,9 @@ func confirmInstallEngram(ui *term.UI, lang string) bool {
 	return ok
 }
 
-func printSummary(ui *term.UI, lang, agent, model string, subagents []string, subagentModel, engramPath string, enableEngram, plugin bool) {
+func printSummary(ui *term.UI, lang string, orchestrator bool, model string, subagents []string, subagentModel, engramPath string, enableEngram, extension bool) {
 	ui.Title(i18n.T(lang, "wizard.confirm"))
-	ui.Info("Primary agent: %s", agent)
+	ui.Info("Orchestrator prompt: %v", orchestrator)
 	if model == "" {
 		ui.Info("Model: %s", i18n.T(lang, "common.inherit"))
 	} else {
@@ -438,7 +400,7 @@ func printSummary(ui *term.UI, lang, agent, model string, subagents []string, su
 	} else {
 		ui.Info("Engram: %s", i18n.T(lang, "common.no"))
 	}
-	ui.Info("TUI plugin: %v", plugin)
+	ui.Info("omp extension: %v", extension)
 }
 
 func uniqueModels(models []detect.LocalModel) []detect.LocalModel {

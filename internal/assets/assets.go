@@ -1,4 +1,4 @@
-// Package assets embeds the agents, skills, commands and plugin shipped by memo-ai.
+// Package assets embeds the prompt, agents, skills, commands and extension shipped by memo-ai.
 package assets
 
 import (
@@ -47,8 +47,10 @@ func kindOf(path string) string {
 		return "skill"
 	case strings.HasPrefix(path, "commands/"):
 		return "command"
-	case strings.HasPrefix(path, "plugins/"):
-		return "plugin"
+	case strings.HasPrefix(path, "extensions/"):
+		return "extension"
+	case strings.HasPrefix(path, "prompts/"):
+		return "prompt"
 	default:
 		return "file"
 	}

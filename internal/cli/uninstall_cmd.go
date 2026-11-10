@@ -2,13 +2,13 @@ package cli
 
 import (
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 	"github.com/luisccalderon/MeMo-AI/internal/uninstall"
 )
 
-func runUninstall(paths opencode.Paths, st *state.State, lang string, opts globals) int {
+func runUninstall(paths omp.Paths, st *state.State, lang string, opts globals) int {
 	ui := term.New(lang)
 	ui.Title(i18n.T(lang, "uninstall.title"))
 

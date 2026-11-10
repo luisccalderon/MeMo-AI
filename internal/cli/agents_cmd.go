@@ -5,38 +5,23 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/opencode"
+	"github.com/luisccalderon/MeMo-AI/internal/omp"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
-func runAgents(paths opencode.Paths, env detect.Environment, st *state.State, lang string) int {
+func runAgents(paths omp.Paths, env detect.Environment, st *state.State, lang string) int {
 	ui := term.New(lang)
 	ui.Title(i18n.T(lang, "agents.title"))
 
-	doc, err := config.Load(paths.ConfigFile)
-	if err != nil {
-		ui.Warn("%s", i18n.Tf(lang, "error.config_parse", err.Error()))
-		doc = &config.Document{Path: paths.ConfigFile, Data: map[string]any{}}
-	}
-	primary := st.PrimaryAgent
-	if primary == "" {
-		primary = config.GetString(doc.Data, "default_agent")
-	}
-	model := st.PrimaryModel
-	if model == "" {
-		model = config.GetString(doc.Data, "model")
-	}
-
-	if primary == "" {
+	if st.InstalledAt == "" {
 		ui.Muted("%s", i18n.T(lang, "agents.no_config"))
 	} else {
-		ui.Info("%s: %s", i18n.T(lang, "agents.primary"), primary)
-		if model != "" {
-			ui.Info("Model: %s", model)
+		ui.Info("%s: %v", i18n.T(lang, "agents.primary"), st.Orchestrator)
+		if st.PrimaryModel != "" {
+			ui.Info("Model: %s", st.PrimaryModel)
 		}
 	}
 	if len(st.Subagents) > 0 {
@@ -50,8 +35,10 @@ func runAgents(paths opencode.Paths, env detect.Environment, st *state.State, la
 	sort.SliceStable(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
 	for _, agent := range agents {
 		marker := " "
-		if agent.ID == primary {
-			marker = "*"
+		for _, enabled := range st.Subagents {
+			if agent.ID == enabled {
+				marker = "*"
+			}
 		}
 		fmt.Printf("  %s %-22s %-10s %s\n", marker, agent.ID, agent.Mode, agent.Description)
 	}

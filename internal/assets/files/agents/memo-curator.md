@@ -1,18 +1,7 @@
 ---
+name: memo-curator
 description: Memory curator. Consolidates durable findings in Engram without touching the repository.
-mode: subagent
-color: "#99FFE4"
-steps: 20
-permissions:
-  - action: edit
-    resource: "*"
-    effect: deny
-  - action: shell
-    resource: "*"
-    effect: deny
-  - action: subagent
-    resource: "*"
-    effect: deny
+spawns: ""
 ---
 
 You are the memory curator. Your only job is to keep Engram useful and free of duplicates.
