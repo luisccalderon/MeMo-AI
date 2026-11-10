@@ -142,7 +142,9 @@ Skills are listed in Pi's system prompt and loaded when their description matche
 
 `extensions/memo-ai/index.ts` is discovered automatically by Pi. It provides:
 
+- The MeMo mark printed once at the start of a session.
 - A `MEMO` status entry (`MEMO · memory` when Engram is configured).
+- A working spinner while the agent runs, colored with the active theme accent.
 - A read-only `memo_status` tool, so the agent reads its configuration instead of guessing.
 - The `/memo-about` command.
 - A reminder to run `/memo-handoff` when the context is about to be compacted.
@@ -191,6 +193,28 @@ memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 See [docs/local-models.md](docs/local-models.md) for the `models.json` entry and capability
 guidance.
 
+## Free models
+
+Two community packages add free model providers to Pi's catalog:
+
+| Package | What it adds |
+| --- | --- |
+| `npm:pi-free` | Free model filtering and dynamic model fetching |
+| `npm:opencode-pi` | Bridges OpenCode's free models into Pi without an OpenCode login |
+
+The installer offers both in interactive mode and runs `pi install` for each one, so Pi owns the
+`packages` entry in `settings.json` and can update them later with `pi update`.
+
+```sh
+memo-ai install --free-models      # install them without asking
+memo-ai install --no-free-models   # never install or ask about them
+```
+
+Non-interactive runs (`--yes`) skip them unless you pass `--free-models`, so a headless install
+never downloads packages you did not ask for. The provider list is not embedded in the binary and
+carries no warranty; the free quota is whatever the upstream provider allows. `memo-ai doctor`
+reports whether they are present.
+
 ## Safety
 
 - Only files recorded in `memo-ai/state.json` are removed.
@@ -231,6 +255,8 @@ Global flags
   --no-orchestrator
   --no-engram
   --no-extension
+  --free-models
+  --no-free-models
   --install-engram
   --force
   --restore

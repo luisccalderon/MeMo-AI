@@ -96,9 +96,22 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 		installExtension, _ = ui.Confirm(i18n.T(lang, "wizard.extension"), true)
 	}
 
+	// Optional free model providers. Both are community packages, so they are
+	// installed only when the user opts in and never ship inside the binary.
+	installFree := false
+	if !opts.noFreeModels {
+		switch {
+		case opts.freeModels:
+			installFree = true
+		case interactive:
+			ui.Muted("%s", i18n.T(lang, "wizard.free_models_hint"))
+			installFree, _ = ui.Confirm(i18n.T(lang, "wizard.free_models"), true)
+		}
+	}
+
 	// Summary.
 	if interactive {
-		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension)
+		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension, installFree)
 		ok, err := ui.Confirm(i18n.T(lang, "wizard.confirm"), true)
 		if err != nil || !ok {
 			ui.Muted(i18n.T(lang, "wizard.cancelled"))
@@ -148,6 +161,21 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 	}
 	if installExtension {
 		ui.Success("%s: %s", i18n.T(lang, "install.extension_ready"), result.ExtensionDir)
+	}
+	for _, ext := range pi.FreeModelExtensions {
+		if !installFree {
+			continue
+		}
+		if pi.HasExtension(paths.SettingsFile, ext.Source) {
+			ui.Muted("%s: %s", i18n.T(lang, "install.free_models_present"), ext.Source)
+			continue
+		}
+		ui.Muted("%s: %s", i18n.T(lang, "install.free_models_installing"), ext.Source)
+		if err := pi.InstallExtension(backgroundContext(), env.PiPath, ext.Source, ui.Out); err != nil {
+			ui.Warn("%s: %v", i18n.T(lang, "install.free_models_failed"), err)
+			continue
+		}
+		ui.Success("%s: %s", i18n.T(lang, "install.free_models_ready"), ext.Source)
 	}
 	ui.Muted("%s", i18n.T(lang, "install.subagents_off"))
 
@@ -293,7 +321,7 @@ func confirmInstallEngram(ui *term.UI, lang string) bool {
 	return ok
 }
 
-func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension bool) {
+func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension, freeModels bool) {
 	ui.Title(i18n.T(lang, "wizard.confirm"))
 	ui.Info("Orchestrator prompt: %v", orchestrator)
 	if model == "" {
@@ -308,6 +336,7 @@ func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath
 		ui.Info("Engram: %s", i18n.T(lang, "common.no"))
 	}
 	ui.Info("Pi extension: %v", extension)
+	ui.Info("Free models (pi-free, opencode-pi): %v", freeModels)
 }
 
 func uniqueModels(models []detect.LocalModel) []detect.LocalModel {

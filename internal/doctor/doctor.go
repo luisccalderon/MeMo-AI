@@ -135,6 +135,23 @@ func Run(paths pi.Paths, env detect.Environment, lang string) Report {
 		add("Model", Skip, "managed by Pi", "Choose one with /model or `memo-ai configure --model <provider/model>`.")
 	}
 
+	// Optional free model providers. Pi owns their settings entries, so the
+	// check reads settings.json instead of MeMo-AI state.
+	var missingFree []string
+	for _, ext := range pi.FreeModelExtensions {
+		if !pi.HasExtension(paths.SettingsFile, ext.Source) {
+			missingFree = append(missingFree, ext.Source)
+		}
+	}
+	switch len(missingFree) {
+	case 0:
+		add("Free models", OK, "pi-free and opencode-pi installed", "")
+	case len(pi.FreeModelExtensions):
+		add("Free models", Warn, "no free model provider installed", "Run `memo-ai install --free-models`.")
+	default:
+		add("Free models", Warn, "missing "+strings.Join(missingFree, ", "), "Run `memo-ai install --free-models`.")
+	}
+
 	// Files. Pi has no built-in subagents, so the orchestrator always works inline.
 	add("Subagents", Skip, "not supported on Pi yet: the orchestrator works inline", "")
 

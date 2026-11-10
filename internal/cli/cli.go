@@ -25,6 +25,8 @@ type globals struct {
 	noOrchestrator bool
 	noExtension    bool
 	installEngram  bool
+	freeModels     bool
+	noFreeModels   bool
 	force          bool
 	json           bool
 	restore        bool
@@ -115,6 +117,8 @@ func parse(args []string) (invocation, error) {
 		"no-orchestrator": &inv.opts.noOrchestrator,
 		"no-extension":    &inv.opts.noExtension,
 		"install-engram":  &inv.opts.installEngram,
+		"free-models":     &inv.opts.freeModels,
+		"no-free-models":  &inv.opts.noFreeModels,
 		"force":           &inv.opts.force,
 		"json":            &inv.opts.json,
 		"restore":         &inv.opts.restore,
@@ -195,6 +199,8 @@ func printHelp(lang string) {
 		{"--no-orchestrator", i18n.T(lang, "help.flag.no-orchestrator")},
 		{"--no-engram", i18n.T(lang, "help.flag.no-engram")},
 		{"--no-extension", i18n.T(lang, "help.flag.no-extension")},
+		{"--free-models", i18n.T(lang, "help.flag.free-models")},
+		{"--no-free-models", i18n.T(lang, "help.flag.no-free-models")},
 	} {
 		fmt.Printf("  %-28s %s\n", row[0], row[1])
 	}
