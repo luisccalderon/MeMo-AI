@@ -107,8 +107,13 @@ export default function memoAI(pi: ExtensionAPI) {
 		const state = readState();
 		ctx.ui.setStatus("memo-ai", state?.engram_mcp ? "MEMO · memory" : "MEMO · no memory");
 		ctx.ui.setWorkingIndicator({ frames: SPINNER_FRAMES, intervalMs: 80 });
-		// Only a fresh session gets the mark; resumed ones already carry it.
-		if (ctx.sessionManager.getEntries().length === 0) {
+		// Only a fresh session gets the mark. Pi records the model and thinking
+		// level before this handler runs, so "fresh" means no conversation yet,
+		// not an empty entry list.
+		const entries = ctx.sessionManager.getEntries();
+		const hasMark = entries.some((entry) => entry.type === "custom" && entry.customType === LOGO_ENTRY);
+		const hasConversation = entries.some((entry) => entry.type === "message");
+		if (!hasMark && !hasConversation) {
 			pi.appendEntry(LOGO_ENTRY, {});
 		}
 	});
