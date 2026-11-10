@@ -14,17 +14,41 @@ shared files before changing them, and can remove everything it installed.
 
 ---
 
-## Quick path
+## Quick install
+
+You need [Pi](https://pi.dev) and [Go 1.23+](https://go.dev/dl/). Engram is optional: the
+wizard can download it for you.
+
+### Linux and macOS
 
 ```sh
-git clone https://github.com/luisccalderon/MeMo-AI.git
-cd MeMo-AI
-make build
-./bin/memo-ai install      # interactive wizard
-./bin/memo-ai doctor       # verify
+go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest
+memo-ai install      # interactive wizard
+memo-ai doctor       # verify
 ```
 
-Then open `pi` and run `/memo`.
+If the shell reports `memo-ai: command not found`, add Go's bin directory to `PATH` (put the line
+in `~/.bashrc` or `~/.zshrc` to keep it):
+
+```sh
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+### Windows (PowerShell)
+
+```powershell
+winget install --id GoLang.Go -e     # skip if Go is already installed
+# Open a new terminal so PATH picks up Go, then:
+go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest
+memo-ai install      # interactive wizard
+memo-ai doctor       # verify
+```
+
+The Go installer adds `%USERPROFILE%\go\bin` to `PATH`. If `memo-ai` is not found, open a new
+terminal or run it as `& "$env:USERPROFILE\go\bin\memo-ai.exe" install`.
+
+Then open `pi` and run `/memo`. To update later, run the same `go install` and `memo-ai install`
+again.
 
 ## Why
 
@@ -53,23 +77,18 @@ the agent asks you again.
 
 | Method | Command |
 | --- | --- |
-| From source | `make build && ./bin/memo-ai install` |
-| Install script | `./scripts/install.sh` (builds this checkout into `~/.local/bin`) |
-| Go | `go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest && memo-ai install` |
+| Go (any OS) | `go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest && memo-ai install` |
+| From a checkout (Linux/macOS) | `make build && ./bin/memo-ai install` |
+| Install script (Linux/macOS) | `./scripts/install.sh` (builds this checkout into `~/.local/bin`) |
+| From a checkout (Windows) | `go install ./cmd/memo-ai` then `memo-ai install` |
 
 ### Windows
 
 The `Makefile` and `scripts/install.sh` are POSIX-only: they rely on `find` and `install`, so they
-do not run in native PowerShell. Build from source with the Go toolchain instead:
+do not run in native PowerShell. Use `go install` as shown in [Quick install](#windows-powershell).
 
-```powershell
-cd C:\Projects\MeMo-AI
-go install ./cmd/memo-ai
-memo-ai install
-```
-
-`go install` writes `memo-ai.exe` to `%USERPROFILE%\go\bin`, which must be in `PATH`. It also skips
-the linker flags, so `memo-ai version` reports `0.1.0-dev`; stamp the version when you need it:
+`go install` skips the linker flags, so `memo-ai version` reports
+`0.1.0-dev`; stamp the version from a checkout when you need it:
 
 ```powershell
 $v = (git describe --tags --always --dirty)
