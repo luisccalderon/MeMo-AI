@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Box, Text } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+import { Box, type Component, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 /**
@@ -24,6 +24,15 @@ const LOGO_ENTRY = "memo-logo";
 const LOGO_WIDTH = 28;
 /** Braille spinner; Pi paints the frames with the active theme accent. */
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/** Hidden widget that only drives repaints while the startup animation plays. */
+const ANIMATION_WIDGET = "memo-logo-animation";
+/** Startup animation: a left-to-right reveal followed by a light sweep. */
+const REVEAL_MS = 450;
+const SHIMMER_MS = 750;
+const ANIMATION_MS = REVEAL_MS + SHIMMER_MS;
+const FRAME_MS = 33;
+/** Half-width of the shimmer band, in columns. */
+const SHIMMER_BAND = 4;
 
 type MemoState = {
 	language?: string;
@@ -45,6 +54,14 @@ const PEACH = rgb(255, 199, 153);
 const MINT = rgb(153, 255, 228);
 const RULE = rgb(80, 80, 80);
 const MUTED = rgb(160, 160, 160);
+const GLOW = rgb(210, 255, 244);
+
+const mix = (from: Rgb, to: Rgb, amount: number): Rgb =>
+	rgb(
+		Math.round(from.r + (to.r - from.r) * amount),
+		Math.round(from.g + (to.g - from.g) * amount),
+		Math.round(from.b + (to.b - from.b) * amount),
+	);
 
 // 20 columns of letters + 5 of ring + 3 of accent = 28.
 const LOGO_ROWS: ReadonlyArray<ReadonlyArray<{ text: string; color: Rgb }>> = [
@@ -64,6 +81,56 @@ const LOGO_ROWS: ReadonlyArray<ReadonlyArray<{ text: string; color: Rgb }>> = [
 		{ text: "  ▌", color: MINT },
 	],
 ];
+
+/**
+ * Paint the mark at `elapsed` ms into the startup animation. Every line keeps
+ * its final width (hidden cells are spaces), so the layout never shifts.
+ * `elapsed` >= ANIMATION_MS yields the static mark.
+ */
+function paintMark(theme: Theme, elapsed: number): string[] {
+	const revealed = Math.min(1, elapsed / REVEAL_MS) * LOGO_WIDTH;
+	const shimmerT = (elapsed - REVEAL_MS) / SHIMMER_MS;
+	const shimmering = shimmerT >= 0 && shimmerT < 1;
+	const center = -SHIMMER_BAND + shimmerT * (LOGO_WIDTH + 2 * SHIMMER_BAND);
+
+	const paintCell = (char: string, column: number, color: Rgb): string => {
+		if (column >= revealed) return " ";
+		if (char === " ") return char;
+		let fg = color;
+		if (elapsed < REVEAL_MS && column > revealed - 2) {
+			// Leading edge of the reveal glows.
+			fg = GLOW;
+		} else if (shimmering) {
+			const distance = Math.abs(column - center);
+			if (distance < SHIMMER_BAND) fg = mix(color, GLOW, 1 - distance / SHIMMER_BAND);
+		}
+		return theme.style(char, { fg });
+	};
+
+	const lines = LOGO_ROWS.map((row) => {
+		let column = 0;
+		let line = "";
+		for (const segment of row) {
+			for (const char of segment.text) {
+				line += paintCell(char, column, segment.color);
+				column += 1;
+			}
+		}
+		return line;
+	});
+	let rule = "";
+	for (let column = 0; column < LOGO_WIDTH; column += 1) rule += paintCell("─", column, RULE);
+	lines.push(rule);
+	// The caption appears once the letters are in place.
+	lines.push(
+		elapsed < REVEAL_MS
+			? ""
+			: theme.style(" M - M   ", { fg: MUTED }) +
+					theme.style("A I", { fg: PEACH }) +
+					theme.style(" · ORCHESTRATOR ", { fg: MUTED }),
+	);
+	return lines;
+}
 
 function readState(): MemoState | undefined {
 	try {
@@ -104,6 +171,9 @@ function describe(state: MemoState | undefined): string {
 
 export default function memoAI(pi: ExtensionAPI) {
 	let quietStartup = startupIsQuiet();
+	/** Set when this process appends a fresh mark; restored marks render static. */
+	let animationStart: number | undefined;
+	const elapsed = () => (animationStart === undefined ? ANIMATION_MS : Date.now() - animationStart);
 
 	pi.registerEntryRenderer(LOGO_ENTRY, (_entry, _options, theme) => {
 		const box = new Box(1, 0);
@@ -118,16 +188,11 @@ export default function memoAI(pi: ExtensionAPI) {
 				box.addChild(new Text("", 0, 0));
 			}
 		}
-		for (const row of LOGO_ROWS) {
-			const line = row.map((segment) => theme.style(segment.text, { fg: segment.color })).join("");
-			box.addChild(new Text(line, 0, 0));
-		}
-		box.addChild(new Text(theme.style("─".repeat(LOGO_WIDTH), { fg: RULE }), 0, 0));
-		const caption =
-			theme.style(" M - M   ", { fg: MUTED }) +
-			theme.style("A I", { fg: PEACH }) +
-			theme.style(" · ORCHESTRATOR ", { fg: MUTED });
-		box.addChild(new Text(caption, 0, 0));
+		const mark: Component = {
+			render: () => paintMark(theme, elapsed()),
+			invalidate() {},
+		};
+		box.addChild(mark);
 		return box;
 	});
 
@@ -143,9 +208,38 @@ export default function memoAI(pi: ExtensionAPI) {
 		const hasMark = entries.some((entry) => entry.type === "custom" && entry.customType === LOGO_ENTRY);
 		const hasConversation = entries.some((entry) => entry.type === "message");
 		if (!hasMark && !hasConversation) {
+			if (ctx.mode === "tui") {
+				animationStart = Date.now();
+				startAnimation(ctx.ui);
+			}
 			pi.appendEntry(LOGO_ENTRY, {});
 		}
 	});
+
+	/**
+	 * Entry renderers get no TUI handle, so a zero-line widget borrows one to
+	 * repaint the mark each frame, then removes itself.
+	 */
+	function startAnimation(ui: ExtensionUIContext) {
+		ui.setWidget(
+			ANIMATION_WIDGET,
+			(tui) => {
+				const timer = setInterval(() => {
+					tui.requestRender();
+					if (elapsed() >= ANIMATION_MS) {
+						clearInterval(timer);
+						ui.setWidget(ANIMATION_WIDGET, undefined);
+					}
+				}, FRAME_MS);
+				return {
+					render: () => [],
+					invalidate() {},
+					dispose: () => clearInterval(timer),
+				};
+			},
+			{ placement: "belowEditor" },
+		);
+	}
 
 	pi.on("session_before_compact", async (_event, ctx) => {
 		ctx.ui.notify("MeMo-AI: context is being compacted. Run /memo-handoff to keep a resumable record.", "info");
