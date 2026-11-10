@@ -12,7 +12,7 @@ import (
 )
 
 // Version is the state schema version.
-const Version = 2
+const Version = 3
 
 // FileRecord is one file written by MeMo-AI.
 type FileRecord struct {
@@ -36,14 +36,12 @@ type State struct {
 	UpdatedAt    string `json:"updated_at"`
 	Orchestrator bool   `json:"orchestrator"`
 	PrimaryModel string `json:"primary_model,omitempty"`
-	// ModelApplied reports whether PrimaryModel reached the omp settings.
-	ModelApplied  bool     `json:"model_applied"`
-	Subagents     []string `json:"subagents"`
-	SubagentModel string   `json:"subagent_model,omitempty"`
-	EngramPath    string   `json:"engram_path,omitempty"`
-	EngramMCP     bool     `json:"engram_mcp"`
-	Extension     bool     `json:"extension"`
-	// Config is omp's mcp.json; Prompt is APPEND_SYSTEM.md.
+	// ModelApplied reports whether PrimaryModel reached Pi's settings.json.
+	ModelApplied bool   `json:"model_applied"`
+	EngramPath   string `json:"engram_path,omitempty"`
+	EngramMCP    bool   `json:"engram_mcp"`
+	Extension    bool   `json:"extension"`
+	// Config is Pi's mcp.json; Prompt is APPEND_SYSTEM.md.
 	Config ConfigRecord `json:"config"`
 	Prompt ConfigRecord `json:"prompt"`
 	Files  []FileRecord `json:"files"`

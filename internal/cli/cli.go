@@ -9,7 +9,7 @@ import (
 	"github.com/luisccalderon/MeMo-AI/internal/banner"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/version"
 )
@@ -56,9 +56,9 @@ func Run(args []string) int {
 		return 0
 	}
 
-	paths, err := omp.Discover()
+	paths, err := pi.Discover()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "memo-ai: cannot resolve omp paths: %v\n", err)
+		fmt.Fprintf(os.Stderr, "memo-ai: cannot resolve Pi paths: %v\n", err)
 		return 1
 	}
 	st, _ := state.Load(paths.StateFile)
@@ -193,7 +193,6 @@ func printHelp(lang string) {
 		{"--dry-run", i18n.T(lang, "help.flag.dry-run")},
 		{"--model <provider/model>", i18n.T(lang, "help.flag.model")},
 		{"--no-orchestrator", i18n.T(lang, "help.flag.no-orchestrator")},
-		{"--no-subagents", i18n.T(lang, "help.flag.no-subagents")},
 		{"--no-engram", i18n.T(lang, "help.flag.no-engram")},
 		{"--no-extension", i18n.T(lang, "help.flag.no-extension")},
 	} {
@@ -203,7 +202,7 @@ func printHelp(lang string) {
 	fmt.Println(i18n.T(lang, "help.examples"))
 	fmt.Println("  memo-ai")
 	fmt.Println("  memo-ai install --lang es --model ollama/qwen3:8b")
-	fmt.Println("  memo-ai install --yes --no-subagents --no-engram")
+	fmt.Println("  memo-ai install --yes --no-engram")
 	fmt.Println("  memo-ai doctor")
 	fmt.Println()
 	fmt.Printf("%s %s\n", banner.Muted, i18n.T(lang, "app.tagline"))

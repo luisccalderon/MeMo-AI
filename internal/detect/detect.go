@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 )
 
 // LocalModel is a model served by a local OpenAI-compatible runtime.
@@ -27,77 +27,113 @@ type LocalModel struct {
 	Endpoint string
 }
 
-// Ref returns the provider/model reference used by omp.
+// Ref returns the provider/model reference used by Pi.
 func (m LocalModel) Ref() string {
 	return m.Provider + "/" + m.ID
 }
 
-// Agent is a discovered omp task agent.
-type Agent struct {
-	ID          string
-	Name        string
-	Description string
-	Mode        string
-	Model       string
-	Path        string
-	Builtin     bool
-}
-
 // Environment is the result of detection.
 type Environment struct {
-	OmpPath       string
-	OmpVersion    string
+	PiPath        string
+	PiVersion     string
 	EngramPath    string
 	EngramVersion string
 	Models        []LocalModel
-	Agents        []Agent
 }
 
 // Detect inspects the machine with a short, bounded timeout.
 func Detect(ctx context.Context) Environment {
 	env := Environment{}
-	if path := FindOmp(); path != "" {
-		env.OmpPath = path
-		env.OmpVersion = commandVersion(ctx, path, "--version")
-		env.OmpVersion = strings.TrimPrefix(env.OmpVersion, "omp ")
+	if path := FindPi(); path != "" {
+		env.PiPath = path
+		env.PiVersion = commandVersion(ctx, path, "--version")
+		env.PiVersion = strings.TrimPrefix(env.PiVersion, "pi ")
 	}
 	env.EngramPath, env.EngramVersion = FindEngram(ctx)
 	env.Models = LocalModels(ctx)
 	return env
 }
 
-// FindOmp locates the oh-my-pi binary. It checks OMP_BIN and PATH first, then
-// the common install locations that are not always present in a
-// non-interactive shell's PATH.
-func FindOmp() string {
-	if override := os.Getenv("OMP_BIN"); override != "" {
-		if info, err := os.Stat(override); err == nil && !info.IsDir() {
+// FindPi locates the Pi binary. It checks PI_BIN, then PATH, then a managed
+// install (the pi.dev installer publishes its launcher inside the agent
+// directory), then the other common install locations that are not always
+// present in a non-interactive shell's PATH.
+//
+// A managed install keeps its launchers in `<agent dir>/bin` and does not add
+// that directory to PATH, so PATH lookup alone reports Pi as missing.
+func FindPi() string {
+	if override := os.Getenv("PI_BIN"); override != "" {
+		if isFile(override) {
 			return override
 		}
 	}
-	if path, err := exec.LookPath("omp"); err == nil {
+	if path, err := exec.LookPath("pi"); err == nil {
 		return path
 	}
-	name := "omp"
-	if runtime.GOOS == "windows" {
-		name = "omp.exe"
+
+	if paths, err := pi.Discover(); err == nil {
+		if path := managedEntrypoint(paths.ConfigDir); path != "" {
+			return path
+		}
+		for _, name := range launcherNames() {
+			if candidate := filepath.Join(paths.ConfigDir, "bin", name); isFile(candidate) {
+				return candidate
+			}
+		}
 	}
+
 	var candidates []string
 	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates,
-			filepath.Join(home, ".bun", "bin", name),
-			filepath.Join(home, ".omp", "bin", name),
-			filepath.Join(home, ".local", "bin", name),
-			filepath.Join(home, "bin", name),
-		)
+		for _, name := range launcherNames() {
+			candidates = append(candidates,
+				filepath.Join(home, ".pi", "bin", name),
+				filepath.Join(home, ".local", "bin", name),
+				filepath.Join(home, "bin", name),
+			)
+		}
 	}
-	candidates = append(candidates, "/usr/local/bin/omp", "/opt/homebrew/bin/omp")
+	candidates = append(candidates, "/usr/local/bin/pi", "/opt/homebrew/bin/pi")
 	for _, path := range candidates {
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		if isFile(path) {
 			return path
 		}
 	}
 	return ""
+}
+
+// launcherNames lists the Pi launcher file names for this platform, in the
+// order a managed install prefers them.
+func launcherNames() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"pi.exe", "pi.cmd", "pi.bat"}
+	}
+	return []string{"pi"}
+}
+
+// managedEntrypoint reads the entrypoint a managed Pi install recorded. The
+// file is the installer's own source of truth, so it wins over guessing names.
+func managedEntrypoint(configDir string) string {
+	raw, err := os.ReadFile(filepath.Join(configDir, "install", "managed-install.json"))
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		Entrypoint struct {
+			Path string `json:"path"`
+		} `json:"entrypoint"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	if !isFile(doc.Entrypoint.Path) {
+		return ""
+	}
+	return doc.Entrypoint.Path
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func commandVersion(ctx context.Context, path string, args ...string) string {
@@ -283,101 +319,6 @@ func nonEmpty(values ...string) []string {
 		}
 	}
 	return out
-}
-
-// Agents returns omp's bundled task agents plus the user-defined ones.
-func Agents(paths omp.Paths) []Agent {
-	agents := []Agent{
-		{ID: "task", Name: "task", Description: "General-purpose worker", Mode: "bundled", Builtin: true},
-		{ID: "scout", Name: "scout", Description: "Fast read-only codebase research", Mode: "bundled", Builtin: true},
-		{ID: "reviewer", Name: "reviewer", Description: "Code review specialist", Mode: "bundled", Builtin: true},
-		{ID: "security-reviewer", Name: "security-reviewer", Description: "Security-focused review", Mode: "bundled", Builtin: true},
-		{ID: "sonic", Name: "sonic", Description: "Fast worker for small tasks", Mode: "bundled", Builtin: true},
-	}
-	seen := map[string]bool{}
-	for _, agent := range agents {
-		seen[agent.ID] = true
-	}
-	entries, _ := os.ReadDir(paths.AgentsDir)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
-			continue
-		}
-		agent := parseAgentFile(paths.AgentsDir, filepath.Join(paths.AgentsDir, entry.Name()))
-		if agent.ID == "" {
-			continue
-		}
-		if seen[agent.ID] {
-			// A user agent overrides the bundled one with the same name.
-			for i := range agents {
-				if agents[i].ID == agent.ID {
-					agents[i] = agent
-				}
-			}
-			continue
-		}
-		seen[agent.ID] = true
-		agents = append(agents, agent)
-	}
-	sort.SliceStable(agents, func(i, j int) bool {
-		if agents[i].Builtin != agents[j].Builtin {
-			return !agents[i].Builtin
-		}
-		return agents[i].ID < agents[j].ID
-	})
-	return agents
-}
-
-func parseAgentFile(root, path string) Agent {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return Agent{}
-	}
-	id := strings.TrimSuffix(filepath.ToSlash(rel), ".md")
-	agent := Agent{ID: id, Name: id, Mode: "user", Path: path}
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return agent
-	}
-	text := string(raw)
-	if !strings.HasPrefix(strings.TrimSpace(text), "---") {
-		return agent
-	}
-	lines := strings.Split(text, "\n")
-	inFront := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "---" {
-			if inFront {
-				break
-			}
-			inFront = true
-			continue
-		}
-		if !inFront {
-			continue
-		}
-		key, value, ok := strings.Cut(trimmed, ":")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.Trim(strings.TrimSpace(value), `"'`)
-		switch key {
-		case "description":
-			agent.Description = value
-		case "model":
-			agent.Model = value
-		case "name":
-			// omp identifies an agent by its frontmatter name, not its file.
-			if value != "" {
-				agent.ID = value
-				agent.Name = value
-			}
-		}
-	}
-	return agent
 }
 
 // DescribeModel formats a model for display.

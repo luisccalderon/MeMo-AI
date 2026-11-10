@@ -10,7 +10,7 @@ import (
 
 	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/promptblock"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
@@ -69,7 +69,7 @@ func (r Report) Counts() (int, int, int, int) {
 }
 
 // Run executes every check.
-func Run(paths omp.Paths, env detect.Environment, lang string) Report {
+func Run(paths pi.Paths, env detect.Environment, lang string) Report {
 	st, stateErr := state.Load(paths.StateFile)
 	report := Report{State: st}
 
@@ -90,11 +90,11 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 		add("State", OK, fmt.Sprintf("installed %s", st.InstalledAt), "")
 	}
 
-	// oh-my-pi.
-	if env.OmpPath != "" {
-		add("oh-my-pi", OK, fmt.Sprintf("%s (%s)", env.OmpVersion, env.OmpPath), "")
+	// Pi.
+	if env.PiPath != "" {
+		add("Pi", OK, fmt.Sprintf("%s (%s)", env.PiVersion, env.PiPath), "")
 	} else {
-		add("oh-my-pi", Fail, "omp binary not found on PATH", "Install it: https://github.com/can1357/oh-my-pi (or set OMP_BIN).")
+		add("Pi", Fail, "pi binary not found on PATH", "Install it: https://pi.dev (or set PI_BIN).")
 	}
 	add("Agent directory", OK, paths.ConfigDir, "")
 
@@ -103,7 +103,7 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 	switch {
 	case err != nil:
 		add("MCP config", Fail, err.Error(), "Fix the JSON in mcp.json or restore a backup.")
-	case !omp.Exists(paths.MCPFile):
+	case !pi.Exists(paths.MCPFile):
 		add("MCP config", Skip, "no mcp.json yet", "")
 	default:
 		add("MCP config", OK, paths.MCPFile, "")
@@ -123,23 +123,20 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 	}
 
 	if st.PrimaryModel != "" && st.ModelApplied {
-		add("Model", OK, st.PrimaryModel+" (modelRoles.default)", "")
+		if provider := localProvider(st.PrimaryModel); provider != "" && !declaresProvider(paths.ModelsFile, provider) {
+			add("Model", Warn, st.PrimaryModel+" is set, but models.json does not declare the "+provider+" provider",
+				"Add it to "+paths.ModelsFile+" (see docs/local-models.md); Pi only lists models of declared providers.")
+		} else {
+			add("Model", OK, st.PrimaryModel+" (settings.json defaultProvider/defaultModel)", "")
+		}
 	} else if st.PrimaryModel != "" {
-		add("Model", Warn, st.PrimaryModel+" was not applied to omp", "Run `omp config set modelRoles.default "+st.PrimaryModel+"`.")
+		add("Model", Warn, st.PrimaryModel+" was not applied to Pi", "Choose it with `/model "+st.PrimaryModel+"` or run `memo-ai configure --model "+st.PrimaryModel+"`.")
 	} else {
-		add("Model", Skip, "managed by omp", "Choose one with /model or `memo-ai configure --model <provider/model>`.")
+		add("Model", Skip, "managed by Pi", "Choose one with /model or `memo-ai configure --model <provider/model>`.")
 	}
 
-	// Files.
-	if len(st.Subagents) > 0 {
-		var agentFiles []string
-		for _, name := range st.Subagents {
-			agentFiles = append(agentFiles, name+".md")
-		}
-		add("Subagents", filesStatus(paths.AgentsDir, agentFiles), strings.Join(st.Subagents, ", "), "Run `memo-ai install`.")
-	} else {
-		add("Subagents", Skip, "disabled: the orchestrator works inline", "Run `memo-ai configure` to enable them.")
-	}
+	// Files. Pi has no built-in subagents, so the orchestrator always works inline.
+	add("Subagents", Skip, "not supported on Pi yet: the orchestrator works inline", "")
 
 	skills := []string{"memo-memory", "memo-delegation", "memo-handoff", "memo-local-models"}
 	var skillPaths []string
@@ -150,9 +147,9 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 
 	commands := []string{
 		"memo.md", "memo-changes.md", "memo-tasks.md", "memo-recall.md", "memo-remember.md",
-		"memo-handoff.md", "memo-review.md", "memo-agents.md",
+		"memo-handoff.md", "memo-review.md",
 	}
-	add("Commands", filesStatus(paths.CommandsDir, commands), joinExisting(paths.CommandsDir, commands), "Run `memo-ai install`.")
+	add("Commands", filesStatus(paths.PromptsDir, commands), joinExisting(paths.PromptsDir, commands), "Run `memo-ai install`.")
 
 	if st.Extension {
 		add("Extension", filesStatus(paths.ExtensionDir, []string{"index.ts"}), paths.ExtensionDir, "Run `memo-ai install`.")
@@ -223,7 +220,7 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 
 	// Backup.
 	if st.Config.Backup != "" {
-		if omp.Exists(st.Config.Backup) {
+		if pi.Exists(st.Config.Backup) {
 			add("Config backup", OK, st.Config.Backup, "")
 		} else {
 			add("Config backup", Warn, "backup missing: "+st.Config.Backup, "")
@@ -234,10 +231,32 @@ func Run(paths omp.Paths, env detect.Environment, lang string) Report {
 	return report
 }
 
+// localProvider returns the provider of a model served by a local runtime that
+// Pi does not ship a provider for, or "" for any other model. Hosted providers
+// authenticate through /login or the environment, which doctor cannot see.
+func localProvider(ref string) string {
+	provider, _, _ := strings.Cut(ref, "/")
+	switch provider {
+	case "ollama", "lm-studio", "vllm":
+		return provider
+	}
+	return ""
+}
+
+// declaresProvider reports whether models.json declares the provider.
+func declaresProvider(modelsFile, provider string) bool {
+	doc, err := config.Load(modelsFile)
+	if err != nil {
+		return false
+	}
+	_, ok := config.Get(doc.Data, "providers", provider)
+	return ok
+}
+
 func filesStatus(root string, files []string) Status {
 	missing := 0
 	for _, file := range files {
-		if !omp.Exists(filepath.Join(root, file)) {
+		if !pi.Exists(filepath.Join(root, file)) {
 			missing++
 		}
 	}
@@ -254,7 +273,7 @@ func filesStatus(root string, files []string) Status {
 func joinExisting(root string, files []string) string {
 	var present []string
 	for _, file := range files {
-		if omp.Exists(filepath.Join(root, file)) {
+		if pi.Exists(filepath.Join(root, file)) {
 			present = append(present, file)
 		}
 	}

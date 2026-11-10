@@ -8,12 +8,12 @@ import (
 
 	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/install"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 )
 
-func testPaths(t *testing.T) omp.Paths {
+func testPaths(t *testing.T) pi.Paths {
 	t.Helper()
-	return omp.At(filepath.Join(t.TempDir(), "agent"))
+	return pi.At(filepath.Join(t.TempDir(), "agent"))
 }
 
 func installOptions() install.Options {
@@ -21,11 +21,9 @@ func installOptions() install.Options {
 		Lang:             "en",
 		Orchestrator:     true,
 		PrimaryModel:     "ollama/qwen3:8b",
-		Subagents:        append([]string(nil), install.MemoSubagents...),
 		EnableEngram:     true,
 		EngramPath:       "/usr/bin/engram",
 		InstallExtension: true,
-		SetModel:         func(string) error { return nil },
 	}
 }
 
@@ -60,11 +58,11 @@ func TestUninstallRestoresMCPBackup(t *testing.T) {
 	if string(got) != original {
 		t.Fatalf("mcp.json not restored:\n%s", got)
 	}
-	if omp.Exists(paths.StateFile) {
+	if pi.Exists(paths.StateFile) {
 		t.Fatal("state file should be removed")
 	}
-	if omp.Exists(filepath.Join(paths.AgentsDir, "memo-writer.md")) {
-		t.Fatal("agent file should be removed")
+	if pi.Exists(filepath.Join(paths.SkillsDir, "memo-memory", "SKILL.md")) {
+		t.Fatal("skill file should be removed")
 	}
 }
 
@@ -97,8 +95,8 @@ func TestUninstallLeavesNothingOnFreshDirectory(t *testing.T) {
 	if _, err := Run(paths, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, gone := range []string{paths.MCPFile, paths.PromptFile, paths.AgentsDir, paths.SkillsDir, paths.CommandsDir, paths.ExtensionsDir, paths.StateFile} {
-		if omp.Exists(gone) {
+	for _, gone := range []string{paths.MCPFile, paths.PromptFile, paths.SkillsDir, paths.PromptsDir, paths.ExtensionsDir, paths.StateFile} {
+		if pi.Exists(gone) {
 			t.Errorf("%s should be removed", gone)
 		}
 	}
@@ -146,13 +144,13 @@ func TestUninstallSkipsModifiedFile(t *testing.T) {
 	if _, err := install.Run(paths, installOptions()); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(paths.AgentsDir, "memo-writer.md")
+	path := filepath.Join(paths.SkillsDir, "memo-memory", "SKILL.md")
 	seed(t, path, "my edits\n")
 	res, err := Run(paths, Options{RestoreConfig: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !omp.Exists(path) {
+	if !pi.Exists(path) {
 		t.Fatal("modified file should be preserved")
 	}
 	if len(res.Skipped) == 0 {
@@ -169,7 +167,7 @@ func TestUninstallMentionsTheModelItLeaves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(res.Warnings, "\n"), "modelRoles.default") {
+	if !strings.Contains(strings.Join(res.Warnings, "\n"), "settings.json") {
 		t.Fatalf("expected a note about the model: %v", res.Warnings)
 	}
 }

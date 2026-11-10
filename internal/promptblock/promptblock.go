@@ -1,6 +1,6 @@
 // Package promptblock manages the MeMo-AI section of a shared prompt file.
 //
-// oh-my-pi appends `APPEND_SYSTEM.md` to its system prompt. That file belongs
+// Pi appends `APPEND_SYSTEM.md` to its system prompt. That file belongs
 // to the user, so MeMo-AI only owns the text between two marker comments and
 // leaves everything else byte-for-byte intact.
 package promptblock

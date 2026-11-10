@@ -31,13 +31,23 @@ func TestParseSubcommandArgs(t *testing.T) {
 	}
 }
 
-func TestParseOmpFlags(t *testing.T) {
+func TestParseSubagentFlagsStayAcceptedForExistingScripts(t *testing.T) {
+	inv, err := parse([]string{"install", "--yes", "--no-subagents", "--subagent-model", "ollama/qwen3:8b"})
+	if err != nil {
+		t.Fatalf("subagent flags must not break existing scripts: %v", err)
+	}
+	if !inv.opts.noSubagents || inv.opts.subagentModel != "ollama/qwen3:8b" {
+		t.Fatalf("subagent flags not parsed: %#v", inv.opts)
+	}
+}
+
+func TestParsePiFlags(t *testing.T) {
 	inv, err := parse([]string{"install", "--no-orchestrator", "--no-extension"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !inv.opts.noOrchestrator || !inv.opts.noExtension {
-		t.Fatalf("omp flags not set: %#v", inv.opts)
+		t.Fatalf("pi flags not set: %#v", inv.opts)
 	}
 	if _, err := parse([]string{"install", "--agent", "build"}); err == nil {
 		t.Fatal("--agent was removed with the OpenCode backend and must be rejected")

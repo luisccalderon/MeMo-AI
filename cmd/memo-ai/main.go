@@ -1,4 +1,4 @@
-// Command memo-ai installs the MeMo-AI coding-agent stack on top of oh-my-pi.
+// Command memo-ai installs the MeMo-AI coding-agent stack on top of Pi.
 package main
 
 import (

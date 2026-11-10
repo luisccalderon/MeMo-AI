@@ -2,17 +2,17 @@ package cli
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
-func runAgents(paths omp.Paths, env detect.Environment, st *state.State, lang string) int {
+// runAgents reports the MeMo-AI configuration. Pi has no built-in subagents,
+// so the orchestrator always works inline and no agent files are installed.
+func runAgents(_ pi.Paths, env detect.Environment, st *state.State, lang string) int {
 	ui := term.New(lang)
 	ui.Title(i18n.T(lang, "agents.title"))
 
@@ -24,24 +24,7 @@ func runAgents(paths omp.Paths, env detect.Environment, st *state.State, lang st
 			ui.Info("Model: %s", st.PrimaryModel)
 		}
 	}
-	if len(st.Subagents) > 0 {
-		ui.Info("%s: %s", i18n.T(lang, "agents.subagents"), strings.Join(st.Subagents, ", "))
-	} else if st.InstalledAt != "" {
-		ui.Info("%s: %s", i18n.T(lang, "agents.subagents"), i18n.T(lang, "common.none"))
-	}
-
-	ui.Title(i18n.T(lang, "agents.available"))
-	agents := detect.Agents(paths)
-	sort.SliceStable(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
-	for _, agent := range agents {
-		marker := " "
-		for _, enabled := range st.Subagents {
-			if agent.ID == enabled {
-				marker = "*"
-			}
-		}
-		fmt.Printf("  %s %-22s %-10s %s\n", marker, agent.ID, agent.Mode, agent.Description)
-	}
+	ui.Info("%s: %s", i18n.T(lang, "agents.subagents"), i18n.T(lang, "agents.subagents_unsupported"))
 
 	ui.Title(i18n.T(lang, "agents.local"))
 	if len(env.Models) == 0 {

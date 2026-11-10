@@ -129,7 +129,7 @@ func Commands() []string {
 	}
 }
 
-// MCPArgs are the arguments omp passes to the Engram binary to start its
+// MCPArgs are the arguments Pi passes to the Engram binary to start its
 // stdio MCP server.
 func MCPArgs() []any {
 	return []any{"mcp", "--tools=agent"}

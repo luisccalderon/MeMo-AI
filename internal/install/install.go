@@ -1,55 +1,43 @@
-// Package install writes the MeMo-AI stack into an oh-my-pi configuration.
+// Package install writes the MeMo-AI stack into a Pi configuration.
 package install
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/luisccalderon/MeMo-AI/internal/assets"
 	"github.com/luisccalderon/MeMo-AI/internal/backup"
 	"github.com/luisccalderon/MeMo-AI/internal/config"
 	"github.com/luisccalderon/MeMo-AI/internal/engram"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/promptblock"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
 
-// MemoSubagents lists the subagents shipped by MeMo-AI.
-var MemoSubagents = []string{"memo-explorer", "memo-writer", "memo-reviewer", "memo-curator"}
-
 // OrchestratorPrompt is the embedded asset written into APPEND_SYSTEM.md.
 const OrchestratorPrompt = "prompts/memo-orchestrator.md"
 
-// ModelRole is the omp model role MeMo-AI assigns the primary model to.
-const ModelRole = "modelRoles.default"
-
-// ModelSetter persists the primary model in omp's settings.
-type ModelSetter func(model string) error
-
 // Options controls an installation.
+//
+// Subagents are intentionally absent: Pi has no built-in subagent support, so
+// the stack runs inline. The agent assets stay embedded for a future release
+// but are never installed.
 type Options struct {
 	Lang string
 	// Orchestrator installs the MeMo operating loop into APPEND_SYSTEM.md.
-	Orchestrator  bool
-	PrimaryModel  string
-	SubagentModel string
-	Subagents     []string
-	EnableEngram  bool
-	EngramPath    string
-	// InstallExtension installs the omp extension (status badge, memo_status).
+	Orchestrator bool
+	// PrimaryModel is a provider/model reference written to settings.json as
+	// defaultProvider and defaultModel.
+	PrimaryModel string
+	EnableEngram bool
+	EngramPath   string
+	// InstallExtension installs the Pi extension (status badge, memo_status).
 	InstallExtension bool
-	// SetModel applies PrimaryModel. When nil the model is recorded in state
-	// only and the user is told how to apply it.
-	SetModel ModelSetter
-	DryRun   bool
+	DryRun           bool
 }
 
 // Result reports what an installation changed.
@@ -64,28 +52,20 @@ type Result struct {
 	State        *state.State
 }
 
-// OmpModelSetter returns a ModelSetter backed by `omp config set`, or nil when
-// the omp binary is unknown. omp validates the value against its own schema,
-// so MeMo-AI never has to edit config.yml by hand.
-func OmpModelSetter(ompPath string) ModelSetter {
-	if ompPath == "" {
-		return nil
+// SplitModel splits a provider/model reference at the first slash, so model
+// IDs that contain slashes (for example OpenRouter ones) stay intact.
+func SplitModel(ref string) (provider, model string, ok bool) {
+	ref = strings.TrimSpace(ref)
+	provider, model, found := strings.Cut(ref, "/")
+	if !found || provider == "" || model == "" || strings.ContainsAny(ref, " \t") {
+		return "", "", false
 	}
-	return func(model string) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(ctx, ompPath, "config", "set", ModelRole, model).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-		}
-		return nil
-	}
+	return provider, model, true
 }
 
 // Run applies the stack. It is idempotent and safe to re-run.
-func Run(paths omp.Paths, opts Options) (Result, error) {
+func Run(paths pi.Paths, opts Options) (Result, error) {
 	res := Result{ConfigPath: paths.MCPFile, PromptPath: paths.PromptFile, ExtensionDir: paths.ExtensionDir}
-	opts.Subagents = filterSubagents(opts.Subagents)
 
 	if !opts.DryRun {
 		if err := paths.EnsureDirs(); err != nil {
@@ -113,9 +93,6 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 		if err != nil {
 			return res, err
 		}
-		if file.Kind == "agent" && opts.SubagentModel != "" {
-			raw = withModel(raw, opts.SubagentModel)
-		}
 		backupPath, err := writeFile(paths, stamp, file.Path, dest, raw, opts.DryRun)
 		if err != nil {
 			return res, err
@@ -142,7 +119,7 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 			res.Writes = append(res.Writes, paths.MCPFile)
 		}
 		if opts.PrimaryModel != "" {
-			res.Writes = append(res.Writes, modelCommand(opts.PrimaryModel))
+			res.Writes = append(res.Writes, paths.SettingsFile+" (defaultProvider, defaultModel)")
 		}
 		return res, nil
 	}
@@ -155,13 +132,12 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 	if err := applyMCP(paths, st, stamp, opts, &res); err != nil {
 		return res, err
 	}
-	st.ModelApplied = applyModel(opts, &res)
+	st.ModelApplied = applyModel(paths, stamp, opts, &res)
 
+	st.Version = state.Version
 	st.Language = opts.Lang
 	st.Orchestrator = opts.Orchestrator
 	st.PrimaryModel = opts.PrimaryModel
-	st.SubagentModel = opts.SubagentModel
-	st.Subagents = append([]string(nil), opts.Subagents...)
 	st.EngramPath = opts.EngramPath
 	st.EngramMCP = opts.EnableEngram && opts.EngramPath != ""
 	st.Extension = opts.InstallExtension
@@ -173,39 +149,18 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 	return res, nil
 }
 
-func filterSubagents(values []string) []string {
-	allowed := map[string]bool{}
-	for _, name := range MemoSubagents {
-		allowed[name] = true
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if allowed[value] && !seen[value] {
-			out = append(out, value)
-			seen[value] = true
-		}
-	}
-	return out
-}
-
-// destination maps an embedded asset to its place in the omp agent directory.
-// omp has no per-agent allow list for the main session, so a subagent is
-// enabled by installing its file and disabled by not installing it.
-func destination(paths omp.Paths, rel string, opts Options) (string, bool) {
+// destination maps an embedded asset to its place in the Pi agent directory.
+//
+// agents/ is deliberately not installed: Pi has no built-in subagent support,
+// so those assets are kept in the binary for a future release. commands/ are
+// Pi prompt templates, which Pi exposes as slash commands from prompts/.
+func destination(paths pi.Paths, rel string, opts Options) (string, bool) {
 	rel = filepath.ToSlash(rel)
 	switch {
 	case strings.HasPrefix(rel, "agents/"):
-		name := strings.TrimSuffix(path.Base(rel), ".md")
-		for _, enabled := range opts.Subagents {
-			if enabled == name {
-				return filepath.Join(paths.AgentsDir, path.Base(rel)), true
-			}
-		}
 		return "", false
 	case strings.HasPrefix(rel, "commands/"):
-		return filepath.Join(paths.CommandsDir, path.Base(rel)), true
+		return filepath.Join(paths.PromptsDir, path.Base(rel)), true
 	case strings.HasPrefix(rel, "skills/"):
 		sub := strings.TrimPrefix(rel, "skills/")
 		return filepath.Join(paths.SkillsDir, filepath.FromSlash(sub)), true
@@ -221,28 +176,7 @@ func destination(paths omp.Paths, rel string, opts Options) (string, bool) {
 	}
 }
 
-// withModel pins a model selector in an agent file's YAML frontmatter.
-func withModel(raw []byte, model string) []byte {
-	text := string(raw)
-	if !strings.HasPrefix(text, "---\n") {
-		return raw
-	}
-	end := strings.Index(text[4:], "\n---")
-	if end < 0 {
-		return raw
-	}
-	head := text[:4+end]
-	line := "model: " + strconv.Quote(model)
-	var kept []string
-	for _, existing := range strings.Split(head, "\n") {
-		if !strings.HasPrefix(existing, "model:") {
-			kept = append(kept, existing)
-		}
-	}
-	return []byte(strings.Join(kept, "\n") + "\n" + line + text[4+end:])
-}
-
-func writeFile(paths omp.Paths, stamp, rel, dest string, data []byte, dry bool) (string, error) {
+func writeFile(paths pi.Paths, stamp, rel, dest string, data []byte, dry bool) (string, error) {
 	backupPath := ""
 	if existing, err := os.ReadFile(dest); err == nil {
 		if bytes.Equal(existing, data) {
@@ -321,7 +255,7 @@ func removeIfEmpty(dir string) {
 
 // applyPrompt keeps the orchestrator block in APPEND_SYSTEM.md in sync with
 // the Orchestrator option, leaving the user's own text untouched.
-func applyPrompt(paths omp.Paths, st *state.State, stamp string, opts Options, res *Result) error {
+func applyPrompt(paths pi.Paths, st *state.State, stamp string, opts Options, res *Result) error {
 	raw, err := os.ReadFile(paths.PromptFile)
 	existed := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -378,14 +312,14 @@ func applyPrompt(paths omp.Paths, st *state.State, stamp string, opts Options, r
 
 // applyMCP merges the Engram server into mcp.json. The file is only created
 // or rewritten when there is something to add or remove.
-func applyMCP(paths omp.Paths, st *state.State, stamp string, opts Options, res *Result) error {
+func applyMCP(paths pi.Paths, st *state.State, stamp string, opts Options, res *Result) error {
 	enable := opts.EnableEngram && opts.EngramPath != ""
 	if opts.EnableEngram && opts.EngramPath == "" {
 		res.Warnings = append(res.Warnings,
 			"Engram no está instalado: se omitió el servidor MCP. / Engram is not installed: MCP server skipped.")
 	}
 
-	existed := omp.Exists(paths.MCPFile)
+	existed := pi.Exists(paths.MCPFile)
 	if !enable && !existed {
 		return nil
 	}
@@ -403,10 +337,14 @@ func applyMCP(paths omp.Paths, st *state.State, stamp string, opts Options, res 
 					current, opts.EngramPath))
 		}
 		servers := config.EnsureMap(doc.Data, "mcpServers")
+		// Pi's default exposure ("codemode") hides a server's tools from the
+		// model behind scripts. Engram is a small tool set the agent uses on
+		// every turn, so it is declared directly like a built-in tool.
 		want := map[string]any{
-			"type":    "stdio",
-			"command": opts.EngramPath,
-			"args":    engram.MCPArgs(),
+			"type":     "stdio",
+			"command":  opts.EngramPath,
+			"args":     engram.MCPArgs(),
+			"exposure": "direct",
 		}
 		if existed && config.FormatJSON(servers["engram"]) == config.FormatJSON(want) {
 			return nil
@@ -444,26 +382,49 @@ func applyMCP(paths omp.Paths, st *state.State, stamp string, opts Options, res 
 	return nil
 }
 
-// applyModel reports whether the model reached omp's settings.
-func applyModel(opts Options, res *Result) bool {
+// applyModel sets defaultProvider and defaultModel in Pi's settings.json and
+// reports whether the model reached it. Every other key, and every other
+// setting, is preserved. A settings file that cannot be parsed is left
+// untouched and reported as a warning so a hand-edited file is never clobbered.
+func applyModel(paths pi.Paths, stamp string, opts Options, res *Result) bool {
 	if opts.PrimaryModel == "" {
 		return false
 	}
-	manual := modelCommand(opts.PrimaryModel)
-	if opts.SetModel == nil {
+	provider, model, ok := SplitModel(opts.PrimaryModel)
+	if !ok {
 		res.Warnings = append(res.Warnings,
-			"No se encontró omp: aplica el modelo con `"+manual+"`. / omp not found: apply the model with that command.")
+			"El modelo debe tener el formato provider/model. / Model must be provider/model.")
 		return false
 	}
-	if err := opts.SetModel(opts.PrimaryModel); err != nil {
-		res.Warnings = append(res.Warnings,
-			fmt.Sprintf("No se pudo aplicar el modelo (%v). Ejecuta `%s`. / Could not apply the model; run that command.", err, manual))
-		return false
-	}
-	res.Writes = append(res.Writes, manual)
-	return true
-}
+	manual := "/model " + opts.PrimaryModel
 
-func modelCommand(model string) string {
-	return "omp config set " + ModelRole + " " + model
+	existed := pi.Exists(paths.SettingsFile)
+	doc, err := config.Load(paths.SettingsFile)
+	if err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo leer settings.json (%v); elige el modelo con `%s`. / Could not read settings.json; choose the model with that command.", err, manual))
+		return false
+	}
+	if config.GetString(doc.Data, "defaultProvider") == provider && config.GetString(doc.Data, "defaultModel") == model {
+		return true
+	}
+	if existed {
+		b, err := backup.Snapshot(paths.BackupDir, stamp, paths.SettingsFile, filepath.Base(paths.SettingsFile))
+		if err != nil {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("No se pudo respaldar settings.json (%v). / Could not back up settings.json.", err))
+			return false
+		}
+		if b != "" {
+			res.Backups = append(res.Backups, b)
+		}
+	}
+	doc.Data["defaultProvider"] = provider
+	doc.Data["defaultModel"] = model
+	if err := doc.Save(); err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo aplicar el modelo (%v). Usa `%s`. / Could not apply the model; use that command.", err, manual))
+		return false
+	}
+	res.Writes = append(res.Writes, paths.SettingsFile+" (defaultProvider, defaultModel)")
+	return true
 }

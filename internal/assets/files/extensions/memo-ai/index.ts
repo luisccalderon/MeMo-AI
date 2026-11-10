@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 /**
- * MeMo-AI extension for oh-my-pi.
+ * MeMo-AI extension for Pi.
  *
- * The orchestration rules live in APPEND_SYSTEM.md, agents, skills and commands.
+ * The orchestration rules live in APPEND_SYSTEM.md, skills and prompt templates.
  * This extension only surfaces state: a status badge, a `memo_status` tool the
  * agent can call instead of guessing its configuration, a `/memo-about` command
  * and a reminder to hand off before the context is compacted.
@@ -19,8 +20,6 @@ type MemoState = {
 	updated_at?: string;
 	orchestrator?: boolean;
 	primary_model?: string;
-	subagents?: string[] | null;
-	subagent_model?: string;
 	engram_mcp?: boolean;
 	engram_path?: string;
 };
@@ -37,25 +36,19 @@ function describe(state: MemoState | undefined): string {
 	if (!state) {
 		return "MeMo-AI is not configured. Run `memo-ai install`.";
 	}
-	const subagents = state.subagents?.length ? state.subagents.join(", ") : "disabled (work inline)";
 	return [
 		"MeMo-AI: your coding agent, bringing your changes, tasks and engineering workflow together.",
 		`Orchestrator prompt: ${state.orchestrator ? "installed" : "not installed"}`,
-		`Model set by MeMo-AI: ${state.primary_model || "none (omp default)"}`,
-		`Subagents: ${subagents}`,
-		`Subagent model: ${state.subagent_model || "inherited"}`,
+		`Model set by MeMo-AI: ${state.primary_model || "none (Pi default)"}`,
+		"Execution: inline (Pi has no subagents yet)",
 		`Engram memory: ${state.engram_mcp ? `configured (${state.engram_path})` : "not configured"}`,
 		"Commit mode: supervised unless the user declares an autonomous run",
 		`Last configured: ${state.updated_at || "unknown"}`,
-		"Commands: /memo /memo-changes /memo-tasks /memo-recall /memo-remember /memo-handoff /memo-review /memo-agents",
+		"Commands: /memo /memo-changes /memo-tasks /memo-recall /memo-remember /memo-handoff /memo-review",
 	].join("\n");
 }
 
 export default function memoAI(pi: ExtensionAPI) {
-	const z = pi.zod;
-
-	pi.setLabel("MeMo-AI");
-
 	pi.on("session_start", async (_event, ctx) => {
 		const state = readState();
 		ctx.ui.setStatus("memo-ai", state?.engram_mcp ? "MEMO · memory" : "MEMO");
@@ -69,10 +62,9 @@ export default function memoAI(pi: ExtensionAPI) {
 		name: "memo_status",
 		label: "MeMo Status",
 		description:
-			"Return the MeMo-AI configuration: orchestrator prompt, model, enabled subagents, " +
-			"Engram memory and commit mode. Read-only. Call it before delegating to a memo-* agent " +
-			"or when asked how MeMo-AI is set up.",
-		parameters: z.object({}),
+			"Return the MeMo-AI configuration: orchestrator prompt, model, Engram memory and commit mode. " +
+			"Read-only. Call it when asked how MeMo-AI is set up instead of guessing.",
+		parameters: Type.Object({}),
 		async execute() {
 			const state = readState();
 			return {

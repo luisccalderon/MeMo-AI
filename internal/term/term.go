@@ -96,8 +96,8 @@ func (u *UI) Error(format string, args ...any) {
 }
 
 // Banner prints the wordmark.
-func (u *UI) Banner(memoVersion, ompVersion string) {
-	banner.Print(u.Out, memoVersion, ompVersion)
+func (u *UI) Banner(memoVersion, piVersion string) {
+	banner.Print(u.Out, memoVersion, piVersion)
 }
 
 func (u *UI) readLine() (string, error) {

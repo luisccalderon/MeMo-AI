@@ -30,10 +30,10 @@ var letters = []string{
 var shades = []string{White, Cream, Peach, Peach, Mint, Mint}
 
 // Print writes the MeMo-AI wordmark, tagline and version line.
-func Print(w io.Writer, memoVersion, ompVersion string) {
+func Print(w io.Writer, memoVersion, piVersion string) {
 	oc := "not detected"
-	if ompVersion != "" {
-		oc = "oh-my-pi " + ompVersion
+	if piVersion != "" {
+		oc = "pi " + piVersion
 	}
 	fmt.Fprintln(w)
 	for i, line := range letters {

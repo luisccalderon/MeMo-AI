@@ -6,12 +6,12 @@ import (
 	"github.com/luisccalderon/MeMo-AI/internal/engram"
 	"github.com/luisccalderon/MeMo-AI/internal/i18n"
 	"github.com/luisccalderon/MeMo-AI/internal/install"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 	"github.com/luisccalderon/MeMo-AI/internal/term"
 )
 
-func runEngram(paths omp.Paths, env detect.Environment, st *state.State, lang string, opts globals, args []string) int {
+func runEngram(paths pi.Paths, env detect.Environment, st *state.State, lang string, opts globals, args []string) int {
 	ui := term.New(lang)
 	action := "status"
 	if len(args) > 0 {
@@ -46,12 +46,9 @@ func runEngram(paths omp.Paths, env detect.Environment, st *state.State, lang st
 			Lang:             lang,
 			Orchestrator:     st.Orchestrator,
 			PrimaryModel:     st.PrimaryModel,
-			SubagentModel:    st.SubagentModel,
-			Subagents:        st.Subagents,
 			EnableEngram:     true,
 			EngramPath:       path,
 			InstallExtension: st.Extension,
-			SetModel:         install.OmpModelSetter(env.OmpPath),
 		})
 		if err != nil {
 			ui.Error(err.Error())

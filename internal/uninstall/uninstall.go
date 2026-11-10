@@ -9,7 +9,7 @@ import (
 
 	"github.com/luisccalderon/MeMo-AI/internal/backup"
 	"github.com/luisccalderon/MeMo-AI/internal/config"
-	"github.com/luisccalderon/MeMo-AI/internal/omp"
+	"github.com/luisccalderon/MeMo-AI/internal/pi"
 	"github.com/luisccalderon/MeMo-AI/internal/promptblock"
 	"github.com/luisccalderon/MeMo-AI/internal/state"
 )
@@ -32,7 +32,7 @@ type Result struct {
 
 // Run removes the installed files, the orchestrator prompt block and the
 // Engram MCP entry.
-func Run(paths omp.Paths, opts Options) (Result, error) {
+func Run(paths pi.Paths, opts Options) (Result, error) {
 	var res Result
 	st, err := state.Load(paths.StateFile)
 	if err != nil {
@@ -77,7 +77,7 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 	// backup, or without --restore, remove only the entry MeMo-AI manages.
 	if opts.RestoreConfig && st.Config.Backup != "" {
 		stamp := "uninstall-" + backup.Stamp()
-		if omp.Exists(st.Config.Path) {
+		if pi.Exists(st.Config.Path) {
 			if saved, err := backup.Snapshot(paths.BackupDir, stamp, st.Config.Path, filepath.Base(st.Config.Path)); err == nil && saved != "" {
 				res.Warnings = append(res.Warnings, "Current config snapshotted at "+saved)
 			}
@@ -93,7 +93,7 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 
 	if st.ModelApplied {
 		res.Warnings = append(res.Warnings,
-			"The omp default model was left as is. Change it with /model or `omp config reset modelRoles.default`.")
+			"The Pi default model was left as is. Change it with /model, or remove defaultProvider and defaultModel from settings.json.")
 	}
 
 	_ = os.Remove(paths.StateFile)
@@ -103,7 +103,7 @@ func Run(paths omp.Paths, opts Options) (Result, error) {
 
 // cleanPrompt strips the managed block from APPEND_SYSTEM.md. Text the user
 // wrote around it is preserved; the file is deleted only when nothing is left.
-func cleanPrompt(paths omp.Paths, res *Result) error {
+func cleanPrompt(paths pi.Paths, res *Result) error {
 	raw, err := os.ReadFile(paths.PromptFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -131,8 +131,8 @@ func cleanPrompt(paths omp.Paths, res *Result) error {
 
 // cleanMCP removes the Engram server only when it still points at the binary
 // MeMo-AI configured, so a server the user re-pointed is left alone.
-func cleanMCP(paths omp.Paths, st *state.State, res *Result) error {
-	if !st.EngramMCP || !omp.Exists(paths.MCPFile) {
+func cleanMCP(paths pi.Paths, st *state.State, res *Result) error {
+	if !st.EngramMCP || !pi.Exists(paths.MCPFile) {
 		return nil
 	}
 	doc, err := config.Load(paths.MCPFile)
