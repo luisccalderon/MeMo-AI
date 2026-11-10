@@ -152,6 +152,14 @@ func Run(paths pi.Paths, env detect.Environment, lang string) Report {
 		add("Free models", Warn, "missing "+strings.Join(missingFree, ", "), "Run `memo-ai install --free-models`.")
 	}
 
+	// pi-atelier is opt-in and owns Pi's custom footer and editor, so its
+	// absence is a normal choice, never a warning.
+	if pi.HasExtension(paths.SettingsFile, pi.AtelierSource) {
+		add("Status rail", OK, "pi-atelier installed", "")
+	} else {
+		add("Status rail", Skip, "pi-atelier not installed", "Run `memo-ai install --atelier` for the status rail and activity sidebar.")
+	}
+
 	// opencode-pi starts the OpenCode CLI without a shell, so a script-only
 	// launcher on Windows lists the models but fails at the first request.
 	if pi.HasExtension(paths.SettingsFile, pi.OpenCodePiSource) {

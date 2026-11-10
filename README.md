@@ -57,6 +57,32 @@ the agent asks you again.
 | Install script | `./scripts/install.sh` (builds this checkout into `~/.local/bin`) |
 | Go | `go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest && memo-ai install` |
 
+### Windows
+
+The `Makefile` and `scripts/install.sh` are POSIX-only: they rely on `find` and `install`, so they
+do not run in native PowerShell. Build from source with the Go toolchain instead:
+
+```powershell
+cd C:\Projects\MeMo-AI
+go install ./cmd/memo-ai
+memo-ai install
+```
+
+`go install` writes `memo-ai.exe` to `%USERPROFILE%\go\bin`, which must be in `PATH`. It also skips
+the linker flags, so `memo-ai version` reports `0.1.0-dev`; stamp the version when you need it:
+
+```powershell
+$v = (git describe --tags --always --dirty)
+go build -trimpath -ldflags "-s -w -X github.com/luisccalderon/MeMo-AI/internal/version.Version=$v" -o "$env:USERPROFILE\go\bin\memo-ai.exe" ./cmd/memo-ai
+```
+
+The installer asks its questions through a TTY, so run it in Windows Terminal, PowerShell or Git
+Bash, never with redirected output. To run the checkout without installing anything:
+
+```powershell
+go run ./cmd/memo-ai install
+```
+
 Non-interactive examples:
 
 ```sh
@@ -193,6 +219,22 @@ memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 See [docs/local-models.md](docs/local-models.md) for the `models.json` entry and capability
 guidance.
 
+## Quiet startup
+
+By default Pi lists every loaded context file, skill, prompt and extension when it starts. The
+installer offers to set `quietStartup` to `"header"` in `settings.json`: Pi keeps its version
+header, the listing is hidden, and the MeMo mark lists the prompt templates instead. `ctrl+o` or
+`pi --verbose` still shows the full listing.
+
+```sh
+memo-ai install --quiet-startup      # apply it without asking
+memo-ai install --no-quiet-startup   # never change or ask about it
+```
+
+Non-interactive runs (`--yes`) leave the setting alone unless you pass `--quiet-startup`. A
+`quietStartup` value you already chose is never replaced, and uninstall removes only the value
+MeMo-AI applied.
+
 ## Free models
 
 Two community packages add free model providers to Pi's catalog:
@@ -222,6 +264,45 @@ the user environment variable `OPENCODE_PI_BIN` to it; with `--free-models` in a
 run it sets it without asking. Open a new terminal afterwards. Linux and macOS need no variable:
 `memo-ai doctor` only checks that `opencode` is on `PATH`. Uninstall leaves the
 packages and the variable in place, because Pi still uses them.
+
+## Status rail and sidebar
+
+`pi-atelier` is a community package that adds a status rail and a live activity sidebar: model,
+context, cost, Git status, TODOs and tool activity. It takes Pi's custom footer and editor, so it
+is installed only when you ask for it and never ships inside the binary.
+
+```sh
+memo-ai install --atelier            # install it without asking
+memo-ai install --no-atelier         # never install or ask about it
+memo-ai install --atelier-config ./my-pi-atelier.json   # copy your own settings
+```
+
+To carry a specific look to another machine, pass your own file with `--atelier-config`. It is
+applied verbatim, implies `--atelier`, and rejects anything that is not a JSON object so a broken
+file never reaches the package. An existing `pi-atelier.json` is snapshotted first and reported,
+so nothing is lost.
+
+Without that flag, when the package is installed and `pi-atelier.json` does not exist yet, the
+installer writes a small preset:
+
+```json
+{
+  "nerdFont": false
+}
+```
+
+Non-interactive runs (`--yes`) skip the package unless you pass `--atelier` or `--atelier-config`.
+`pi install` owns the `packages` entry, so `pi update` keeps it current.
+
+Plain text keeps the layout on any monospace font. Every other value stays with the package, so
+Atelier's own defaults keep working as it evolves. Without `--atelier-config`, an existing
+`pi-atelier.json` is never touched. Uninstall removes only a file MeMo-AI wrote and you left
+unchanged; a copied file that you edited is kept unless `--force` is used.
+
+MeMo-AI does not reimplement that UI: its own
+mark stays a chat entry and its `MEMO · memory` status stays in the status line, so both can be
+active at once. `memo-ai doctor` reports whether it is present. Uninstall leaves the package in
+place, because Pi still uses it; remove it with `pi uninstall npm:pi-atelier`.
 
 ## Safety
 
@@ -265,6 +346,11 @@ Global flags
   --no-extension
   --free-models
   --no-free-models
+  --atelier
+  --no-atelier
+  --atelier-config <file>
+  --quiet-startup
+  --no-quiet-startup
   --install-engram
   --force
   --restore

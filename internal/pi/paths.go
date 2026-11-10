@@ -15,6 +15,10 @@ type Paths struct {
 	// SettingsFile is Pi's settings.json. MeMo-AI only touches the default
 	// model keys in it.
 	SettingsFile string
+	// AtelierFile is pi-atelier's user-scope settings file. MeMo-AI writes a
+	// preset there only when the user opts into the package and the file does
+	// not exist yet.
+	AtelierFile string
 	// ModelsFile is Pi's models.json, where custom providers are declared.
 	// MeMo-AI only reads it.
 	ModelsFile string
@@ -50,6 +54,7 @@ func At(configDir string) Paths {
 		ConfigDir:     configDir,
 		MCPFile:       filepath.Join(configDir, "mcp.json"),
 		SettingsFile:  filepath.Join(configDir, "settings.json"),
+		AtelierFile:   filepath.Join(configDir, "pi-atelier.json"),
 		ModelsFile:    filepath.Join(configDir, "models.json"),
 		PromptFile:    filepath.Join(configDir, "APPEND_SYSTEM.md"),
 		PromptsDir:    filepath.Join(configDir, "prompts"),

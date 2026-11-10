@@ -17,6 +17,8 @@ import { Type } from "typebox";
 // Installed at <agent dir>/extensions/memo-ai/index.ts; state lives two levels up.
 const STATE_FILE = fileURLToPath(new URL("../../memo-ai/state.json", import.meta.url));
 
+const SETTINGS_FILE = fileURLToPath(new URL("../../settings.json", import.meta.url));
+
 const LOGO_ENTRY = "memo-logo";
 /** The mark is exactly this wide; every line below is padded to it. */
 const LOGO_WIDTH = 28;
@@ -71,6 +73,19 @@ function readState(): MemoState | undefined {
 	}
 }
 
+/**
+ * Whether Pi hides its loaded-resource listing at startup. When it does, the
+ * mark lists the prompt templates itself; otherwise Pi already shows them.
+ */
+function startupIsQuiet(): boolean {
+	try {
+		const settings = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as { quietStartup?: unknown };
+		return settings.quietStartup === true || settings.quietStartup === "header";
+	} catch {
+		return false;
+	}
+}
+
 function describe(state: MemoState | undefined): string {
 	if (!state) {
 		return "MeMo-AI is not configured. Run `memo-ai install`.";
@@ -88,8 +103,21 @@ function describe(state: MemoState | undefined): string {
 }
 
 export default function memoAI(pi: ExtensionAPI) {
+	let quietStartup = startupIsQuiet();
+
 	pi.registerEntryRenderer(LOGO_ENTRY, (_entry, _options, theme) => {
 		const box = new Box(1, 0);
+		if (quietStartup) {
+			const prompts = pi
+				.getCommands()
+				.filter((command) => command.source === "prompt")
+				.map((command) => `/${command.name}`);
+			if (prompts.length > 0) {
+				box.addChild(new Text(theme.style("[Prompts]", { fg: PEACH }), 0, 0));
+				box.addChild(new Text(theme.style(`  ${prompts.join(", ")}`, { fg: MUTED }), 0, 0));
+				box.addChild(new Text("", 0, 0));
+			}
+		}
 		for (const row of LOGO_ROWS) {
 			const line = row.map((segment) => theme.style(segment.text, { fg: segment.color })).join("");
 			box.addChild(new Text(line, 0, 0));
@@ -105,6 +133,7 @@ export default function memoAI(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const state = readState();
+		quietStartup = startupIsQuiet();
 		ctx.ui.setStatus("memo-ai", state?.engram_mcp ? "MEMO · memory" : "MEMO · no memory");
 		ctx.ui.setWorkingIndicator({ frames: SPINNER_FRAMES, intervalMs: 80 });
 		// Only a fresh session gets the mark. Pi records the model and thinking

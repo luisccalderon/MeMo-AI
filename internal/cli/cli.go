@@ -27,6 +27,11 @@ type globals struct {
 	installEngram  bool
 	freeModels     bool
 	noFreeModels   bool
+	atelier        bool
+	noAtelier      bool
+	atelierConfig  string
+	quietStartup   bool
+	noQuietStartup bool
 	force          bool
 	json           bool
 	restore        bool
@@ -108,22 +113,27 @@ func parse(args []string) (invocation, error) {
 		"lang":           &inv.opts.lang,
 		"model":          &inv.opts.model,
 		"subagent-model": &inv.opts.subagentModel,
+		"atelier-config": &inv.opts.atelierConfig,
 	}
 	boolFlags := map[string]*bool{
-		"yes":             &inv.opts.yes,
-		"dry-run":         &inv.opts.dryRun,
-		"no-subagents":    &inv.opts.noSubagents,
-		"no-engram":       &inv.opts.noEngram,
-		"no-orchestrator": &inv.opts.noOrchestrator,
-		"no-extension":    &inv.opts.noExtension,
-		"install-engram":  &inv.opts.installEngram,
-		"free-models":     &inv.opts.freeModels,
-		"no-free-models":  &inv.opts.noFreeModels,
-		"force":           &inv.opts.force,
-		"json":            &inv.opts.json,
-		"restore":         &inv.opts.restore,
-		"help":            &inv.opts.help,
-		"version":         &inv.opts.version,
+		"yes":              &inv.opts.yes,
+		"dry-run":          &inv.opts.dryRun,
+		"no-subagents":     &inv.opts.noSubagents,
+		"no-engram":        &inv.opts.noEngram,
+		"no-orchestrator":  &inv.opts.noOrchestrator,
+		"no-extension":     &inv.opts.noExtension,
+		"install-engram":   &inv.opts.installEngram,
+		"free-models":      &inv.opts.freeModels,
+		"no-free-models":   &inv.opts.noFreeModels,
+		"atelier":          &inv.opts.atelier,
+		"no-atelier":       &inv.opts.noAtelier,
+		"quiet-startup":    &inv.opts.quietStartup,
+		"no-quiet-startup": &inv.opts.noQuietStartup,
+		"force":            &inv.opts.force,
+		"json":             &inv.opts.json,
+		"restore":          &inv.opts.restore,
+		"help":             &inv.opts.help,
+		"version":          &inv.opts.version,
 	}
 
 	for i := 0; i < len(args); i++ {
@@ -201,6 +211,11 @@ func printHelp(lang string) {
 		{"--no-extension", i18n.T(lang, "help.flag.no-extension")},
 		{"--free-models", i18n.T(lang, "help.flag.free-models")},
 		{"--no-free-models", i18n.T(lang, "help.flag.no-free-models")},
+		{"--atelier", i18n.T(lang, "help.flag.atelier")},
+		{"--no-atelier", i18n.T(lang, "help.flag.no-atelier")},
+		{"--atelier-config <file>", i18n.T(lang, "help.flag.atelier-config")},
+		{"--quiet-startup", i18n.T(lang, "help.flag.quiet-startup")},
+		{"--no-quiet-startup", i18n.T(lang, "help.flag.no-quiet-startup")},
 	} {
 		fmt.Printf("  %-28s %s\n", row[0], row[1])
 	}

@@ -54,6 +54,36 @@ func TestParsePiFlags(t *testing.T) {
 	}
 }
 
+func TestParseQuietStartupFlags(t *testing.T) {
+	inv, err := parse([]string{"install", "--quiet-startup", "--no-quiet-startup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inv.opts.quietStartup || !inv.opts.noQuietStartup {
+		t.Fatalf("quiet startup flags not set: %#v", inv.opts)
+	}
+}
+
+func TestParseAtelierFlags(t *testing.T) {
+	inv, err := parse([]string{"install", "--atelier", "--no-atelier"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inv.opts.atelier || !inv.opts.noAtelier {
+		t.Fatalf("atelier flags not set: %#v", inv.opts)
+	}
+}
+
+func TestParseAtelierConfigFlag(t *testing.T) {
+	inv, err := parse([]string{"install", "--atelier-config", "C:/tmp/mine.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.opts.atelierConfig != "C:/tmp/mine.json" {
+		t.Fatalf("atelier-config = %q", inv.opts.atelierConfig)
+	}
+}
+
 func TestParseErrors(t *testing.T) {
 	if _, err := parse([]string{"--unknown"}); err == nil {
 		t.Fatal("expected unknown flag error")

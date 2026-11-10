@@ -58,6 +58,33 @@ antes de que el agente vuelva a preguntarte.
 | Script de instalación | `./scripts/install.sh` (compila este checkout en `~/.local/bin`) |
 | Go | `go install github.com/luisccalderon/MeMo-AI/cmd/memo-ai@latest && memo-ai install` |
 
+### Windows
+
+El `Makefile` y `scripts/install.sh` son solo POSIX: dependen de `find` e `install`, así que no
+funcionan en PowerShell nativo. Compila desde el código con el toolchain de Go:
+
+```powershell
+cd C:\Projects\MeMo-AI
+go install ./cmd/memo-ai
+memo-ai install
+```
+
+`go install` deja `memo-ai.exe` en `%USERPROFILE%\go\bin`, que debe estar en el `PATH`. También
+omite los flags del linker, así que `memo-ai version` reporta `0.1.0-dev`; si necesitas la versión
+real:
+
+```powershell
+$v = (git describe --tags --always --dirty)
+go build -trimpath -ldflags "-s -w -X github.com/luisccalderon/MeMo-AI/internal/version.Version=$v" -o "$env:USERPROFILE\go\bin\memo-ai.exe" ./cmd/memo-ai
+```
+
+El instalador pregunta por TTY, así que ejecútalo en Windows Terminal, PowerShell o Git Bash, nunca
+con la salida redirigida. Para correr el checkout sin instalar nada:
+
+```powershell
+go run ./cmd/memo-ai install
+```
+
 Ejemplos no interactivos:
 
 ```sh
@@ -198,6 +225,22 @@ memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 Consulta [docs/local-models.md](docs/local-models.md) para la entrada de `models.json` y la guía
 de capacidad.
 
+## Arranque silencioso
+
+Por defecto Pi lista al iniciar cada archivo de contexto, skill, prompt y extensión que carga. El
+instalador ofrece fijar `quietStartup` en `"header"` dentro de `settings.json`: Pi conserva su
+encabezado con la versión, el listado se oculta y el logo de MeMo muestra los prompts en su lugar.
+`ctrl+o` o `pi --verbose` siguen mostrando el listado completo.
+
+```sh
+memo-ai install --quiet-startup      # lo aplica sin preguntar
+memo-ai install --no-quiet-startup   # nunca lo cambia ni pregunta
+```
+
+Las ejecuciones no interactivas (`--yes`) no tocan el ajuste salvo que pases `--quiet-startup`.
+Un valor de `quietStartup` que ya hayas elegido nunca se reemplaza, y la desinstalación quita solo
+el valor que aplicó MeMo-AI.
+
 ## Modelos gratis
 
 Dos paquetes de la comunidad añaden proveedores de modelos gratis al catálogo de Pi:
@@ -226,6 +269,48 @@ instalación global de npm, por ejemplo). El instalador lo detecta, busca el `op
 ofrece fijar la variable de entorno de usuario `OPENCODE_PI_BIN` con esa ruta; con `--free-models`
 en una ejecución no interactiva la fija sin preguntar. Abre una terminal nueva después. Linux y
 macOS no necesitan la variable: `memo-ai doctor` solo comprueba que `opencode` esté en el `PATH`. La desinstalación deja los paquetes y la variable, porque Pi los sigue usando.
+
+## Barra de estado y sidebar
+
+`pi-atelier` es un paquete de la comunidad que añade una barra de estado y una sidebar de
+actividad en vivo: modelo, contexto, costo, estado de Git, TODOs y actividad de herramientas.
+Ocupa el footer y el editor propios de Pi, por eso se instala solo si lo pides y nunca viene
+dentro del binario.
+
+```sh
+memo-ai install --atelier            # lo instala sin preguntar
+memo-ai install --no-atelier         # nunca lo instala ni pregunta
+memo-ai install --atelier-config ./mi-pi-atelier.json   # copia tu propia configuración
+```
+
+Para llevar un look concreto a otra máquina, pasa tu archivo con `--atelier-config`. Se aplica
+tal cual, implica `--atelier` y rechaza cualquier cosa que no sea un objeto JSON, para que un
+archivo roto nunca llegue al paquete. Si ya existe un `pi-atelier.json`, se respalda antes y se
+informa la ruta, así no se pierde nada.
+
+Sin ese flag, cuando el paquete se instala y `pi-atelier.json` aún no existe, el instalador
+escribe un preset mínimo:
+
+```json
+{
+  "nerdFont": false
+}
+```
+
+Las ejecuciones no interactivas (`--yes`) omiten el paquete salvo que pases `--atelier` o
+`--atelier-config`. `pi install` es dueño de la entrada `packages`, así que `pi update` lo
+mantiene al día.
+
+El texto plano funciona con cualquier fuente monoespaciada. El resto de los valores queda en manos
+del paquete, para que sus defaults sigan evolucionando. Sin `--atelier-config`, un
+`pi-atelier.json` existente nunca se toca. La desinstalación solo borra un archivo que MeMo-AI
+escribió y tú no modificaste; un archivo copiado que editaste se conserva salvo que uses
+`--force`.
+
+MeMo-AI no reimplementa esa UI: su logo sigue siendo una entrada del chat y su estado
+`MEMO · memory` sigue en la línea de estado, así que ambos conviven. `memo-ai doctor` informa si
+está presente. La desinstalación deja el paquete, porque Pi lo sigue usando; quítalo con
+`pi uninstall npm:pi-atelier`.
 
 ## Seguridad
 
@@ -269,6 +354,11 @@ Flags globales
   --no-extension
   --free-models
   --no-free-models
+  --atelier
+  --no-atelier
+  --atelier-config <archivo>
+  --quiet-startup
+  --no-quiet-startup
   --install-engram
   --force
   --restore

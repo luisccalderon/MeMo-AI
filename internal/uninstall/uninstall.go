@@ -96,6 +96,18 @@ func Run(paths pi.Paths, opts Options) (Result, error) {
 			"The Pi default model was left as is. Change it with /model, or remove defaultProvider and defaultModel from settings.json.")
 	}
 
+	if st.QuietStartup {
+		if err := cleanQuietStartup(paths, &res); err != nil {
+			res.Warnings = append(res.Warnings, "Could not clean quietStartup in "+paths.SettingsFile+": "+err.Error())
+		}
+	}
+
+	if st.AtelierConfig.Path != "" {
+		if err := cleanAtelierConfig(st.AtelierConfig, opts.Force, &res); err != nil {
+			res.Warnings = append(res.Warnings, "Could not clean "+st.AtelierConfig.Path+": "+err.Error())
+		}
+	}
+
 	_ = os.Remove(paths.StateFile)
 	removeEmptyParents(filepath.Dir(paths.StateFile), paths.ConfigDir)
 	return res, nil
@@ -158,6 +170,51 @@ func cleanMCP(paths pi.Paths, st *state.State, res *Result) error {
 		return err
 	}
 	res.Removed = append(res.Removed, paths.MCPFile+" (cleaned)")
+	return nil
+}
+
+// cleanQuietStartup removes the quietStartup value MeMo-AI applied. A value
+// the user changed afterwards is left alone.
+func cleanQuietStartup(paths pi.Paths, res *Result) error {
+	if !pi.Exists(paths.SettingsFile) {
+		return nil
+	}
+	doc, err := config.Load(paths.SettingsFile)
+	if err != nil {
+		return err
+	}
+	if current, ok := config.Get(doc.Data, "quietStartup"); !ok || current != pi.QuietStartupValue {
+		return nil
+	}
+	config.Delete(doc.Data, "quietStartup")
+	if err := doc.Save(); err != nil {
+		return err
+	}
+	res.Removed = append(res.Removed, paths.SettingsFile+" (quietStartup)")
+	return nil
+}
+
+// cleanAtelierConfig removes the pi-atelier.json MeMo-AI wrote, preset or
+// user-supplied. A file edited afterwards is kept unless --force is used, the
+// same contract as every other recorded file.
+func cleanAtelierConfig(record state.FileRecord, force bool, res *Result) error {
+	hash, err := state.HashFile(record.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if hash != record.SHA256 && !force {
+		res.Skipped = append(res.Skipped, record.Path)
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("%s was modified; use --force to remove it.", record.Path))
+		return nil
+	}
+	if err := os.Remove(record.Path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	res.Removed = append(res.Removed, record.Path)
 	return nil
 }
 

@@ -41,6 +41,13 @@ type State struct {
 	EngramPath   string `json:"engram_path,omitempty"`
 	EngramMCP    bool   `json:"engram_mcp"`
 	Extension    bool   `json:"extension"`
+	// QuietStartup records that MeMo-AI wrote quietStartup to settings.json,
+	// so uninstall removes only a value it applied.
+	QuietStartup bool `json:"quiet_startup,omitempty"`
+	// AtelierConfig records the pi-atelier.json MeMo-AI wrote: the preset it
+	// created, or the user's own file passed with --atelier-config. The hash
+	// lets uninstall remove only a file it wrote and nobody edited.
+	AtelierConfig FileRecord `json:"atelier_config,omitempty"`
 	// Config is Pi's mcp.json; Prompt is APPEND_SYSTEM.md.
 	Config ConfigRecord `json:"config"`
 	Prompt ConfigRecord `json:"prompt"`

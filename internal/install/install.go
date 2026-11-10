@@ -3,6 +3,8 @@ package install
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -37,19 +39,29 @@ type Options struct {
 	EngramPath   string
 	// InstallExtension installs the Pi extension (status badge, memo_status).
 	InstallExtension bool
-	DryRun           bool
+	// QuietStartup sets quietStartup to "header" in settings.json, so Pi keeps
+	// its version header and hides the loaded-resource listing.
+	QuietStartup bool
+	// AtelierConfig writes the pi-atelier.json preset, but only when the user
+	// opted into pi-atelier and the file does not exist yet.
+	AtelierConfig bool
+	// AtelierConfigFile is a pi-atelier.json the user wants applied verbatim.
+	// It takes precedence over the preset and implies installing the package.
+	AtelierConfigFile string
+	DryRun            bool
 }
 
 // Result reports what an installation changed.
 type Result struct {
-	Writes       []string
-	Backups      []string
-	Warnings     []string
-	ConfigPath   string
-	BackupPath   string
-	PromptPath   string
-	ExtensionDir string
-	State        *state.State
+	Writes        []string
+	Backups       []string
+	Warnings      []string
+	ConfigPath    string
+	BackupPath    string
+	PromptPath    string
+	ExtensionDir  string
+	AtelierConfig bool
+	State         *state.State
 }
 
 // SplitModel splits a provider/model reference at the first slash, so model
@@ -121,6 +133,15 @@ func Run(paths pi.Paths, opts Options) (Result, error) {
 		if opts.PrimaryModel != "" {
 			res.Writes = append(res.Writes, paths.SettingsFile+" (defaultProvider, defaultModel)")
 		}
+		if opts.QuietStartup {
+			res.Writes = append(res.Writes, paths.SettingsFile+" (quietStartup)")
+		}
+		if opts.AtelierConfig && !pi.Exists(paths.AtelierFile) {
+			res.Writes = append(res.Writes, paths.AtelierFile)
+		}
+		if opts.AtelierConfigFile != "" {
+			res.Writes = append(res.Writes, paths.AtelierFile+" (from "+opts.AtelierConfigFile+")")
+		}
 		return res, nil
 	}
 
@@ -133,6 +154,10 @@ func Run(paths pi.Paths, opts Options) (Result, error) {
 		return res, err
 	}
 	st.ModelApplied = applyModel(paths, stamp, opts, &res)
+	if applyQuietStartup(paths, stamp, opts, &res) {
+		st.QuietStartup = true
+	}
+	res.AtelierConfig = applyAtelierConfig(paths, st, stamp, opts, &res)
 
 	st.Version = state.Version
 	st.Language = opts.Lang
@@ -170,6 +195,10 @@ func destination(paths pi.Paths, rel string, opts Options) (string, bool) {
 		}
 		sub := strings.TrimPrefix(rel, "extensions/memo-ai/")
 		return filepath.Join(paths.ExtensionDir, filepath.FromSlash(sub)), true
+	case strings.HasPrefix(rel, "atelier/"):
+		// A preset for a third-party package: written by applyAtelierConfig,
+		// only when the user opted in and owns no file yet.
+		return "", false
 	default:
 		// prompts/ is merged into APPEND_SYSTEM.md, never copied.
 		return "", false
@@ -379,6 +408,124 @@ func applyMCP(paths pi.Paths, st *state.State, stamp string, opts Options, res *
 	}
 	res.Writes = append(res.Writes, paths.MCPFile)
 	res.BackupPath = st.Config.Backup
+	return nil
+}
+
+// applyQuietStartup sets quietStartup in Pi's settings.json and reports
+// whether this run wrote it. A value the user already chose ("header" or
+// true) is left alone, and so is a settings file that cannot be parsed.
+func applyQuietStartup(paths pi.Paths, stamp string, opts Options, res *Result) bool {
+	if !opts.QuietStartup {
+		return false
+	}
+	existed := pi.Exists(paths.SettingsFile)
+	doc, err := config.Load(paths.SettingsFile)
+	if err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo leer settings.json (%v); el arranque silencioso no se aplicó. / Could not read settings.json; quiet startup was not applied.", err))
+		return false
+	}
+	if current, ok := config.Get(doc.Data, "quietStartup"); ok && (current == pi.QuietStartupValue || current == true) {
+		return false
+	}
+	if existed {
+		b, err := backup.Snapshot(paths.BackupDir, stamp, paths.SettingsFile, filepath.Base(paths.SettingsFile))
+		if err != nil {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("No se pudo respaldar settings.json (%v). / Could not back up settings.json.", err))
+			return false
+		}
+		if b != "" {
+			res.Backups = append(res.Backups, b)
+		}
+	}
+	doc.Data["quietStartup"] = pi.QuietStartupValue
+	if err := doc.Save(); err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo aplicar el arranque silencioso (%v). / Could not apply quiet startup.", err))
+		return false
+	}
+	res.Writes = append(res.Writes, paths.SettingsFile+" (quietStartup)")
+	return true
+}
+
+// applyAtelierConfig writes pi-atelier.json and reports whether this run wrote
+// it. With AtelierConfigFile the user's own file wins and is applied verbatim;
+// otherwise the embedded preset is used, and only when no file exists yet,
+// because the package owns the keys a user may have changed.
+func applyAtelierConfig(paths pi.Paths, st *state.State, stamp string, opts Options, res *Result) bool {
+	if opts.AtelierConfigFile != "" {
+		raw, err := os.ReadFile(opts.AtelierConfigFile)
+		if err != nil {
+			res.Warnings = append(res.Warnings,
+				fmt.Sprintf("No se pudo leer %s (%v). / Could not read %s.", opts.AtelierConfigFile, err, opts.AtelierConfigFile))
+			return false
+		}
+		if err := validateAtelierConfig(raw); err != nil {
+			res.Warnings = append(res.Warnings,
+				fmt.Sprintf("%s no es un JSON de objeto válido (%v). / %s is not a valid JSON object.", opts.AtelierConfigFile, err, opts.AtelierConfigFile))
+			return false
+		}
+		return writeAtelierConfig(paths, st, stamp, raw, "atelier-config", res)
+	}
+	if !opts.AtelierConfig || pi.Exists(paths.AtelierFile) {
+		return false
+	}
+	raw, err := assets.Read(pi.AtelierConfigAsset)
+	if err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo leer el preset de pi-atelier (%v). / Could not read the pi-atelier preset.", err))
+		return false
+	}
+	return writeAtelierConfig(paths, st, stamp, raw, "atelier-preset", res)
+}
+
+// writeAtelierConfig writes raw to pi-atelier.json, snapshotting an existing
+// file first, and records the hash so uninstall can undo only what it wrote.
+func writeAtelierConfig(paths pi.Paths, st *state.State, stamp string, raw []byte, kind string, res *Result) bool {
+	if existing, err := os.ReadFile(paths.AtelierFile); err == nil {
+		if bytes.Equal(existing, raw) {
+			return false
+		}
+		saved, err := backup.Snapshot(paths.BackupDir, stamp, paths.AtelierFile, filepath.Base(paths.AtelierFile))
+		if err != nil {
+			res.Warnings = append(res.Warnings,
+				fmt.Sprintf("No se pudo respaldar pi-atelier.json (%v). / Could not back up pi-atelier.json.", err))
+			return false
+		}
+		if saved != "" {
+			res.Backups = append(res.Backups, saved)
+		}
+	} else if err := os.MkdirAll(filepath.Dir(paths.AtelierFile), 0o755); err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo crear el directorio de pi-atelier (%v). / Could not create the pi-atelier directory.", err))
+		return false
+	}
+	if err := os.WriteFile(paths.AtelierFile, raw, 0o644); err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo escribir pi-atelier.json (%v). / Could not write pi-atelier.json.", err))
+		return false
+	}
+	hash, err := state.HashFile(paths.AtelierFile)
+	if err != nil {
+		res.Warnings = append(res.Warnings,
+			fmt.Sprintf("No se pudo leer pi-atelier.json tras escribirlo (%v). / Could not read pi-atelier.json back.", err))
+		return false
+	}
+	st.AtelierConfig = state.FileRecord{Path: paths.AtelierFile, SHA256: hash, Kind: kind}
+	res.Writes = append(res.Writes, paths.AtelierFile)
+	return true
+}
+
+// validateAtelierConfig accepts only a JSON object: the package reads named
+// keys, so an array or a scalar would be written and then silently ignored.
+func validateAtelierConfig(raw []byte) error {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return err
+	}
+	if doc == nil {
+		return errors.New("empty object")
+	}
 	return nil
 }
 

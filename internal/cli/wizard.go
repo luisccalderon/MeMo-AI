@@ -24,6 +24,20 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 		return 2
 	}
 
+	// A config to copy requires the package and cannot be combined with the
+	// flag that says "never install it". Validate the source before asking
+	// anything else, so a typo never reaches the summary.
+	if opts.atelierConfig != "" {
+		if opts.noAtelier {
+			ui.Error("%s", i18n.T(lang, "error.atelier_config_conflict"))
+			return 2
+		}
+		if _, err := os.Stat(opts.atelierConfig); err != nil {
+			ui.Error("%s: %v", i18n.T(lang, "error.atelier_config_missing"), err)
+			return 2
+		}
+	}
+
 	// Language is the first question only on a fresh interactive install.
 	if opts.lang == "" && st.Language == "" && interactive {
 		idx, err := ui.Select(i18n.T(lang, "wizard.language"), []term.Option{
@@ -136,9 +150,44 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 		}
 	}
 
+	// Optional status rail and activity sidebar. A community package that owns
+	// Pi's custom footer and editor, so it is installed only on request and
+	// never bundled with MeMo-AI. An explicit --atelier-config is consent for
+	// both the package and the file it carries.
+	installAtelier := false
+	if !opts.noAtelier {
+		switch {
+		case opts.atelier || opts.atelierConfig != "":
+			installAtelier = true
+		case interactive:
+			ui.Muted("%s", i18n.T(lang, "wizard.atelier_hint"))
+			installAtelier, _ = ui.Confirm(i18n.T(lang, "wizard.atelier"), false)
+		}
+	}
+
+	// Quiet startup: Pi keeps its version header and hides the resource
+	// listing; the extension lists the prompt templates next to the mark.
+	quietStartup := false
+	if !opts.noQuietStartup {
+		switch {
+		case opts.quietStartup:
+			quietStartup = true
+		case interactive:
+			ui.Muted("%s", i18n.T(lang, "wizard.quiet_startup_hint"))
+			quietStartup, _ = ui.Confirm(i18n.T(lang, "wizard.quiet_startup"), true)
+		}
+	}
+
 	// Summary.
 	if interactive {
-		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension, installFree, openCodeBin)
+		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension, installFree, installAtelier, openCodeBin, quietStartup)
+		if installAtelier {
+			source := i18n.T(lang, "wizard.atelier_config_preset")
+			if opts.atelierConfig != "" {
+				source = opts.atelierConfig
+			}
+			ui.Info("pi-atelier config: %s", source)
+		}
 		ok, err := ui.Confirm(i18n.T(lang, "wizard.confirm"), true)
 		if err != nil || !ok {
 			ui.Muted(i18n.T(lang, "wizard.cancelled"))
@@ -148,13 +197,16 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 
 	ui.Title(i18n.T(lang, "wizard.installing"))
 	result, err := install.Run(paths, install.Options{
-		Lang:             lang,
-		Orchestrator:     orchestrator,
-		PrimaryModel:     model,
-		EnableEngram:     enableEngram && engramPath != "",
-		EngramPath:       engramPath,
-		InstallExtension: installExtension,
-		DryRun:           opts.dryRun,
+		Lang:              lang,
+		Orchestrator:      orchestrator,
+		PrimaryModel:      model,
+		EnableEngram:      enableEngram && engramPath != "",
+		EngramPath:        engramPath,
+		InstallExtension:  installExtension,
+		QuietStartup:      quietStartup,
+		AtelierConfig:     installAtelier && opts.atelierConfig == "",
+		AtelierConfigFile: opts.atelierConfig,
+		DryRun:            opts.dryRun,
 	})
 	if err != nil {
 		ui.Error(err.Error())
@@ -192,6 +244,9 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 	if installExtension {
 		ui.Success("%s: %s", i18n.T(lang, "install.extension_ready"), result.ExtensionDir)
 	}
+	if result.State != nil && result.State.QuietStartup && quietStartup {
+		ui.Success("%s", i18n.T(lang, "install.quiet_startup_ready"))
+	}
 	for _, ext := range pi.FreeModelExtensions {
 		if !installFree {
 			continue
@@ -206,6 +261,28 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 			continue
 		}
 		ui.Success("%s: %s", i18n.T(lang, "install.free_models_ready"), ext.Source)
+	}
+	if installAtelier {
+		switch {
+		case pi.HasExtension(paths.SettingsFile, pi.AtelierSource):
+			ui.Muted("%s: %s", i18n.T(lang, "install.atelier_present"), pi.AtelierSource)
+		default:
+			ui.Muted("%s: %s", i18n.T(lang, "install.atelier_installing"), pi.AtelierSource)
+			if err := pi.InstallExtension(backgroundContext(), env.PiPath, pi.AtelierSource, ui.Out); err != nil {
+				ui.Warn("%s: %v", i18n.T(lang, "install.atelier_failed"), err)
+			} else {
+				ui.Success("%s: %s", i18n.T(lang, "install.atelier_ready"), pi.AtelierSource)
+			}
+		}
+		if result.AtelierConfig {
+			if opts.atelierConfig != "" {
+				ui.Success("%s: %s", i18n.T(lang, "install.atelier_config_from"), opts.atelierConfig)
+			} else {
+				ui.Success("%s", i18n.T(lang, "install.atelier_config_ready"))
+			}
+		} else if pi.Exists(paths.AtelierFile) {
+			ui.Muted("%s", i18n.T(lang, "install.atelier_config_kept"))
+		}
 	}
 	// The variable only makes sense once the bridge is really installed.
 	if openCodeBin != "" && pi.HasExtension(paths.SettingsFile, pi.OpenCodePiSource) {
@@ -362,7 +439,7 @@ func confirmInstallEngram(ui *term.UI, lang string) bool {
 	return ok
 }
 
-func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension, freeModels bool, openCodeBin string) {
+func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension, freeModels, atelier bool, openCodeBin string, quietStartup bool) {
 	ui.Title(i18n.T(lang, "wizard.confirm"))
 	ui.Info("Orchestrator prompt: %v", orchestrator)
 	if model == "" {
@@ -378,6 +455,8 @@ func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath
 	}
 	ui.Info("Pi extension: %v", extension)
 	ui.Info("Free models (pi-free, opencode-pi): %v", freeModels)
+	ui.Info("Status rail (pi-atelier): %v", atelier)
+	ui.Info("Quiet startup: %v", quietStartup)
 	if openCodeBin != "" {
 		ui.Info("%s: %s", pi.OpenCodeBinEnv, openCodeBin)
 	}

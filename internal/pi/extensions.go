@@ -10,6 +10,10 @@ import (
 	"os/exec"
 )
 
+// QuietStartupValue is the quietStartup setting MeMo-AI applies: Pi keeps its
+// version header and hides the loaded-resource listing.
+const QuietStartupValue = "header"
+
 // FreeModelExtension is a third-party Pi package that registers free model
 // providers. MeMo-AI never edits Pi's settings.json for these: `pi install`
 // owns the settings entry, so the packages stay upgradable through Pi itself.
@@ -17,6 +21,17 @@ type FreeModelExtension struct {
 	Name   string
 	Source string
 }
+
+// AtelierSource is the optional community package that adds the status rail and
+// activity sidebar. MeMo-AI keeps its own mark and status instead of
+// reimplementing that UI, and `pi install` owns the settings entry, so the
+// package stays upgradable through Pi.
+const AtelierSource = "npm:pi-atelier"
+
+// AtelierConfigAsset is the embedded pi-atelier.json preset. It pins only
+// nerdFont, because plain text works with any monospace font and every other
+// default stays with the package as it evolves.
+const AtelierConfigAsset = "atelier/pi-atelier.json"
 
 // FreeModelExtensions lists the optional packages that unlock free models in Pi.
 // Both are community packages, installed only when the user opts in.
