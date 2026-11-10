@@ -2,25 +2,25 @@
 
 Engram is the persistent memory layer for MeMo-AI. It stores durable project
 knowledge — decisions, fixes, constraints, handoffs — and exposes it to
-OpenCode as an MCP server. The goal is simple: the agent should recover what
+oh-my-pi (`omp`) as an MCP server. The goal is simple: the agent should recover what
 the project already knows before asking you again.
 
 - Upstream: <https://github.com/Gentleman-Programming/engram>
-- Installed by MeMo-AI as a **local** MCP server.
+- Installed by MeMo-AI as a **stdio** MCP server.
 - Optional: MeMo-AI works without Engram, but loses cross-session memory.
 
 ## Configuration
 
-`memo-ai install` writes this into the OpenCode config when Engram is enabled:
+`memo-ai install` merges this into `~/.omp/agent/mcp.json` when Engram is
+enabled. Other servers in that file are left untouched:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "engram": {
-        "type": "local",
-        "command": ["/usr/bin/engram", "mcp", "--tools=agent"]
-      }
+  "mcpServers": {
+    "engram": {
+      "type": "stdio",
+      "command": "/usr/bin/engram",
+      "args": ["mcp", "--tools=agent"]
     }
   }
 }
@@ -30,8 +30,9 @@ the project already knows before asking you again.
 surface. The command path is the one detected at install time. If Engram is
 moved later, re-run `memo-ai configure` or edit the path.
 
-Disable memory with `--no-engram`; MeMo-AI then leaves `mcp.servers.engram`
-untouched if it already exists.
+Disable memory with `--no-engram`. MeMo-AI then removes `mcpServers.engram`
+only if a previous run added it and it still points at the same binary; a
+server you configured yourself is left alone.
 
 ## Checking and installing Engram
 
@@ -93,17 +94,20 @@ list on your version.
 
 ## Troubleshooting
 
-**OpenCode does not list Engram.** OpenCode reads MCP servers at startup.
-Restart it after install. In V2, check `opencode mcp list`; under some
-standalone modes this command can report no servers even when the API shows
-the connection. Trust the server log or the `/api/plugin` endpoint.
+**omp does not list Engram.** omp reads MCP servers at startup. Restart it
+after install, then run `/mcp` inside a session. `memo-ai doctor` shows the
+command recorded in `mcp.json`.
+
+**Tools have a prefix.** Depending on the omp version, Engram tools may appear
+as `mem_*` or with a server prefix. The prompts refer to the short names; the
+agent uses whichever the runtime exposes.
 
 **`engram` not found.** Run `memo-ai doctor`; it reports the detected path and
 version. Install with `memo-ai engram install` or point `engram_path` at your
 binary by re-running `memo-ai configure`.
 
 **Tools fail with a schema error.** MeMo-AI pins `--tools=agent`; if you
-changed it, restore it and restart OpenCode.
+changed it, restore it and restart omp.
 
 **Nothing is remembered across sessions.** Memory is scoped to the project
 directory. Confirm you are in the same project, then run `/memo-recall

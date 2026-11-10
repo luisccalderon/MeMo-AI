@@ -1,7 +1,7 @@
 # Local models
 
-MeMo-AI can point OpenCode at any `provider/model` pair, including a model
-served locally. This guide covers detection, choosing a model that can
+MeMo-AI can point oh-my-pi (`omp`) at any `provider/model` pair, including a
+model served locally. This guide covers detection, choosing a model that can
 actually drive the agent stack, and the context limits that matter.
 
 ## Detection
@@ -20,16 +20,19 @@ advisory: you can always type a model manually.
 
 ```sh
 memo-ai install --yes --model ollama/qwen3:8b
-memo-ai install --yes --model lmstudio/qwen2.5-coder-7b
+memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 memo-ai install --yes --model vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
 ```
 
-If OpenCode uses a different provider id for your runtime, use that id. The
-value is written verbatim to `model` and to the agent definitions.
+`--model` runs `omp config set modelRoles.default <provider/model>`;
+`--subagent-model` pins `model:` in the MeMo agent files. omp discovers Ollama
+(`ollama`) and LM Studio (`lm-studio`) by itself. vLLM is not built in: add a
+provider to `~/.omp/agent/models.yml` first (see the vLLM example). Check what
+omp sees with `omp models <provider>`.
 
-## What the primary agent needs
+## What the main session needs
 
-The primary agent is an orchestrator. It must reliably:
+The main session runs the orchestrator. It must reliably:
 
 1. Call tools (read, grep, edit, shell, memory).
 2. Follow a structured prompt without drifting.
@@ -37,13 +40,13 @@ The primary agent is an orchestrator. It must reliably:
 4. Emit valid tool arguments, especially for edits and memory writes.
 
 Tool calling is the hard requirement. A model that cannot emit tool calls can
-still chat in OpenCode, but it cannot run the MeMo-AI workflow.
+still chat in omp, but it cannot run the MeMo-AI workflow.
 
 ### Practical minimums
 
 | Use | Suggested capability |
 | --- | --- |
-| Primary orchestrator | Strong tool calling, 32k+ context, instruction following |
+| Main session (orchestrator) | Strong tool calling, 32k+ context, instruction following |
 | Subagents | Same tool calling, smaller context is usually fine |
 | Memory-only setup | Any tool-capable model; run `--no-subagents` |
 
@@ -53,7 +56,7 @@ model.
 
 ## Context window
 
-OpenCode sends the system prompt, agent prompt, skills and conversation on
+omp sends the system prompt, the MeMo block, skill descriptions and conversation on
 every turn. Budget for:
 
 - Base system and MeMo-AI prompts: a few thousand tokens.
@@ -85,15 +88,36 @@ exact flag has changed across releases.
 3. Install:
 
 ```sh
-memo-ai install --yes --model lmstudio/qwen2.5-coder-7b
+memo-ai install --yes --model lm-studio/qwen2.5-coder-7b
 ```
 
 ## vLLM example
 
 ```sh
 vllm serve Qwen/Qwen3-Coder-30B-A3B-Instruct --port 8000
+```
+
+Declare the provider in `~/.omp/agent/models.yml`:
+
+```yaml
+providers:
+  vllm:
+    baseUrl: http://127.0.0.1:8000/v1
+    api: openai-completions
+    auth: none
+    models:
+      - id: Qwen/Qwen3-Coder-30B-A3B-Instruct
+        name: Qwen3 Coder 30B
+        contextWindow: 65536
+        maxTokens: 8192
+```
+
+```sh
 memo-ai install --yes --model vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
 ```
+
+Keep `models.yml` valid YAML: omp quarantines an invalid config file and
+refuses to start.
 
 Use the model id exactly as vLLM reports it under `/v1/models`.
 
@@ -105,14 +129,14 @@ memo-ai doctor            # installation and environment health
 memo-ai doctor --json     # machine-readable output for scripts
 ```
 
-Then in OpenCode, run `/memo` to see the active configuration and ask for a
+Then in omp, run `/memo` to see the active configuration and ask for a
 small task that requires a tool call (for example, "read README.md and list
 the headings"). If the model answers from memory instead of calling the read
 tool, it is not ready for the orchestrator role.
 
 ## Fallbacks
 
-- Keep a hosted model configured as the primary and use a local model for
+- Keep a hosted model on the default role and use a local model for
   subagents via `--subagent-model`.
 - If the local model lacks tool calling, run with `--no-subagents` and use it
   as a plain chat model; memory tools still require tool support.
