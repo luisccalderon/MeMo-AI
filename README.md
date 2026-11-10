@@ -215,6 +215,14 @@ never downloads packages you did not ask for. The provider list is not embedded 
 carries no warranty; the free quota is whatever the upstream provider allows. `memo-ai doctor`
 reports whether they are present.
 
+`opencode-pi` starts the OpenCode CLI without a shell. On Windows that fails with
+`spawn opencode ENOENT` when `opencode` is only a `.cmd`/`.ps1` launcher on `PATH` (the npm global
+install, for example). The installer detects this, finds the real `opencode.exe` and offers to set
+the user environment variable `OPENCODE_PI_BIN` to it; with `--free-models` in a non-interactive
+run it sets it without asking. Open a new terminal afterwards. Linux and macOS need no variable:
+`memo-ai doctor` only checks that `opencode` is on `PATH`. Uninstall leaves the
+packages and the variable in place, because Pi still uses them.
+
 ## Safety
 
 - Only files recorded in `memo-ai/state.json` are removed.

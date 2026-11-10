@@ -220,6 +220,13 @@ instalación desatendida nunca descarga paquetes que no pediste. La lista de pro
 incluida en el binario y no ofrece garantías; la cuota gratis es la que permita cada proveedor.
 `memo-ai doctor` informa si están presentes.
 
+`opencode-pi` inicia el CLI de OpenCode sin shell. En Windows eso falla con
+`spawn opencode ENOENT` cuando `opencode` es solo un lanzador `.cmd`/`.ps1` en el `PATH` (la
+instalación global de npm, por ejemplo). El instalador lo detecta, busca el `opencode.exe` real y
+ofrece fijar la variable de entorno de usuario `OPENCODE_PI_BIN` con esa ruta; con `--free-models`
+en una ejecución no interactiva la fija sin preguntar. Abre una terminal nueva después. Linux y
+macOS no necesitan la variable: `memo-ai doctor` solo comprueba que `opencode` esté en el `PATH`. La desinstalación deja los paquetes y la variable, porque Pi los sigue usando.
+
 ## Seguridad
 
 - Solo se eliminan los archivos registrados en `memo-ai/state.json`.

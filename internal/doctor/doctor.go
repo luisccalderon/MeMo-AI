@@ -152,6 +152,13 @@ func Run(paths pi.Paths, env detect.Environment, lang string) Report {
 		add("Free models", Warn, "missing "+strings.Join(missingFree, ", "), "Run `memo-ai install --free-models`.")
 	}
 
+	// opencode-pi starts the OpenCode CLI without a shell, so a script-only
+	// launcher on Windows lists the models but fails at the first request.
+	if pi.HasExtension(paths.SettingsFile, pi.OpenCodePiSource) {
+		name, detail, status, hint := openCodeCLICheck(pi.DetectOpenCodeLauncher())
+		add(name, status, detail, hint)
+	}
+
 	// Files. Pi has no built-in subagents, so the orchestrator always works inline.
 	add("Subagents", Skip, "not supported on Pi yet: the orchestrator works inline", "")
 
@@ -246,6 +253,31 @@ func Run(paths pi.Paths, env detect.Environment, lang string) Report {
 
 	_ = lang
 	return report
+}
+
+// openCodeCLICheck turns the launcher inspection into a doctor row.
+func openCodeCLICheck(launcher pi.OpenCodeLauncher) (name, detail string, status Status, hint string) {
+	name = "OpenCode CLI"
+	fix := "Run `memo-ai install --free-models`"
+	if launcher.Candidate != "" {
+		fix += " or set " + pi.OpenCodeBinEnv + " to " + launcher.Candidate
+	} else {
+		fix = "Set " + pi.OpenCodeBinEnv + " to the full path of opencode.exe"
+	}
+	switch launcher.Status {
+	case pi.LauncherOK:
+		if launcher.Configured != "" {
+			return name, pi.OpenCodeBinEnv + "=" + launcher.Configured, OK, ""
+		}
+		return name, "opencode starts from PATH", OK, ""
+	case pi.LauncherMissing:
+		return name, "opencode-pi is installed but the OpenCode CLI was not found", Warn,
+			"Install it: https://opencode.ai (or set " + pi.OpenCodeBinEnv + ")."
+	case pi.LauncherBrokenBin:
+		return name, pi.OpenCodeBinEnv + " points to a missing file: " + launcher.Configured, Warn, fix + "."
+	default:
+		return name, "opencode is only a .cmd/.ps1 launcher on PATH; opencode-pi cannot start it", Warn, fix + "."
+	}
 }
 
 // localProvider returns the provider of a model served by a local runtime that

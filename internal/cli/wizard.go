@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"strings"
 
 	"github.com/luisccalderon/MeMo-AI/internal/detect"
@@ -109,9 +110,35 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 		}
 	}
 
+	// opencode-pi starts the OpenCode CLI without a shell. On Windows that fails
+	// when only script launchers are on PATH, so offer to point OPENCODE_PI_BIN
+	// at the real executable. An explicit --free-models is consent enough.
+	openCodeBin := ""
+	if installFree {
+		launcher := pi.DetectOpenCodeLauncher()
+		needsBin := launcher.Status == pi.LauncherNeedsBin || launcher.Status == pi.LauncherBrokenBin
+		switch {
+		case !needsBin:
+		case launcher.Candidate == "":
+			ui.Warn("%s", i18n.T(lang, "wizard.opencode_bin_missing"))
+		case interactive:
+			ui.Muted("%s", i18n.T(lang, "wizard.opencode_bin_hint"))
+			if launcher.Configured != "" {
+				ui.Muted("%s: %s", i18n.T(lang, "common.current"), launcher.Configured)
+			}
+			ui.Muted("%s=%s", pi.OpenCodeBinEnv, launcher.Candidate)
+			if ok, _ := ui.Confirm(i18n.T(lang, "wizard.opencode_bin"), true); ok {
+				openCodeBin = launcher.Candidate
+			}
+		case launcher.Configured == "":
+			// Unattended runs never replace a value the user already chose.
+			openCodeBin = launcher.Candidate
+		}
+	}
+
 	// Summary.
 	if interactive {
-		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension, installFree)
+		printSummary(ui, lang, orchestrator, model, engramPath, enableEngram, installExtension, installFree, openCodeBin)
 		ok, err := ui.Confirm(i18n.T(lang, "wizard.confirm"), true)
 		if err != nil || !ok {
 			ui.Muted(i18n.T(lang, "wizard.cancelled"))
@@ -138,6 +165,9 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 		ui.Warn(i18n.T(lang, "install.dry_run"))
 		for _, write := range result.Writes {
 			ui.Info("would write %s", write)
+		}
+		if openCodeBin != "" {
+			ui.Info("would set %s=%s", pi.OpenCodeBinEnv, openCodeBin)
 		}
 		return 0
 	}
@@ -176,6 +206,17 @@ func runWizard(paths pi.Paths, env detect.Environment, st *state.State, opts glo
 			continue
 		}
 		ui.Success("%s: %s", i18n.T(lang, "install.free_models_ready"), ext.Source)
+	}
+	// The variable only makes sense once the bridge is really installed.
+	if openCodeBin != "" && pi.HasExtension(paths.SettingsFile, pi.OpenCodePiSource) {
+		if err := pi.SetUserEnv(pi.OpenCodeBinEnv, openCodeBin); err != nil {
+			ui.Warn("%s: %v", i18n.T(lang, "install.opencode_bin_failed"), err)
+		} else {
+			// Let the health check below see it without re-reading the registry.
+			_ = os.Setenv(pi.OpenCodeBinEnv, openCodeBin)
+			ui.Success("%s: %s=%s", i18n.T(lang, "install.opencode_bin_ready"), pi.OpenCodeBinEnv, openCodeBin)
+			ui.Muted("%s", i18n.T(lang, "install.opencode_bin_restart"))
+		}
 	}
 	ui.Muted("%s", i18n.T(lang, "install.subagents_off"))
 
@@ -321,7 +362,7 @@ func confirmInstallEngram(ui *term.UI, lang string) bool {
 	return ok
 }
 
-func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension, freeModels bool) {
+func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath string, enableEngram, extension, freeModels bool, openCodeBin string) {
 	ui.Title(i18n.T(lang, "wizard.confirm"))
 	ui.Info("Orchestrator prompt: %v", orchestrator)
 	if model == "" {
@@ -337,6 +378,9 @@ func printSummary(ui *term.UI, lang string, orchestrator bool, model, engramPath
 	}
 	ui.Info("Pi extension: %v", extension)
 	ui.Info("Free models (pi-free, opencode-pi): %v", freeModels)
+	if openCodeBin != "" {
+		ui.Info("%s: %s", pi.OpenCodeBinEnv, openCodeBin)
+	}
 }
 
 func uniqueModels(models []detect.LocalModel) []detect.LocalModel {
